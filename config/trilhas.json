@@ -1,0 +1,69 @@
+{
+  "trilhas": [
+    {
+      "id": "previdenciario",
+      "nome": "Previdenciário · BPC/LOAS",
+      "ativa": true,
+      "publico": "idosos 65+, pessoas com deficiência, autistas e quem cuida deles; famílias de baixa renda que lidam com o INSS",
+      "quemPublica": "advogado previdenciarista brasileiro",
+      "objetivo": "Mostrar uma dor ou corrigir uma crença sobre o benefício, sem vender. A pessoa comenta a palavra e recebe um material prático (checklist em passos).",
+      "porDia": 3,
+      "youtube": {
+        "regionCode": "BR",
+        "relevanceLanguage": "pt",
+        "janelaDias": [3, 60],
+        "buscas": [
+          "BPC LOAS",
+          "benefício de prestação continuada",
+          "BPC autismo",
+          "BPC idoso renda familiar",
+          "perícia INSS BPC",
+          "aposentadoria INSS advogado",
+          "auxílio-doença negado INSS",
+          "revisão da aposentadoria"
+        ]
+      },
+      "instagram": {
+        "perfis": [],
+        "nota": "Adicione aqui @ de advogados previdenciaristas brasileiros com conta profissional. Só entram perfis que você conferiu."
+      },
+      "minimoOutlier": 5,
+      "minimoViews": 20000
+    },
+    {
+      "id": "ia-advogados",
+      "nome": "IA e Claude para advogados",
+      "ativa": true,
+      "publico": "advogados e escritórios brasileiros que querem usar IA (Claude, ChatGPT) no dia a dia",
+      "quemPublica": "especialista em IA para advocacia (Pakki)",
+      "objetivo": "Adaptar o viral gringo de IA para a rotina do escritório. A pessoa comenta a palavra e recebe o prompt, o passo a passo ou o checklist prometido.",
+      "porDia": 3,
+      "youtube": {
+        "regionCode": "US",
+        "relevanceLanguage": "en",
+        "janelaDias": [3, 45],
+        "buscas": [
+          "Claude AI tips",
+          "ChatGPT prompts",
+          "AI agents tutorial",
+          "Claude Code",
+          "AI for lawyers",
+          "ChatGPT for lawyers"
+        ]
+      },
+      "instagram": {
+        "perfis": [
+          "mavgpt", "sabrina_ramonov", "nick_saraev", "cindiezhu", "raycfu",
+          "taki.gpt", "imjonathanacuna", "nocode.joshua", "limor_markman",
+          "msbintel", "sebintel", "charliehills", "edwinavoiceofai",
+          "itsmariahbrunner", "zoesullivanofficial", "jasoncooperson",
+          "fabionkallaku", "samdespomarketing", "adamerhart", "alassafi.ai",
+          "itsellagonzales", "realmelaninking", "maxjohnscn", "valeridoesai"
+        ],
+        "nota": "Perfis gringos de IA levantados em 11/11/2026 (posts com 10 mil+ comentários)."
+      },
+      "minimoOutlier": 3,
+      "minimoViews": 50000
+    }
+  ]
+}

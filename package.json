@@ -1,0 +1,15 @@
+{
+  "name": "fabrica-reels-juridico",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minera virais (YouTube e Instagram) todo dia e escreve roteiros de reels jurídicos com material de entrega por palavra-chave.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dia": "node bin/rodar-dia.mjs",
+    "simular": "node bin/rodar-dia.mjs --simular",
+    "test": "node --test test/*.test.mjs"
+  }
+}
