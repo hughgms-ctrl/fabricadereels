@@ -15,6 +15,18 @@ echo.
 echo  3. Porta do SSH do Termux (Enter = 8022)
 set "PORTA=8022"
 set /p PORTA=    Porta: 
+rem Tira espacos digitados sem querer
+set "IP=%IP: =%"
+set "USUARIO=%USUARIO: =%"
+set "PORTA=%PORTA: =%"
+echo %IP%| findstr /r /x "[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*" >nul || (
+  echo.
+  echo  O IP "%IP%" nao esta no formato certo: sao 4 numeros separados por ponto, ex.: 100.94.189.8
+  echo  Rode este arquivo de novo.
+  echo.
+  pause
+  exit /b 1
+)
 (
 echo IP=%IP%
 echo USUARIO=%USUARIO%
