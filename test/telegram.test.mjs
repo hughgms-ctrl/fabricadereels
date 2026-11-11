@@ -88,7 +88,8 @@ test('avisos: textos das etapas', async () => {
   assert.match(r, /Validar antes de gravar/);
 
   const ed = msgEdicao({ candidato: c, roteiro, ficha: { cortes: [], ritmo: { planos: 1 } }, pedidoEdicao: 'Edite...' });
-  assert.match(ed.legenda, /referência/);
+  assert.match(ed.legenda, /40\.000 comentários/);
+  assert.match(ed.blocos.join('\n'), /Fala:/);
   assert.match(ed.blocos.join('\n'), /plano único/);
 
   const pub = msgPublicacao({ palavra: 'CASA', url: 'https://site/casa/', mensagemDm: 'Oi!', site: 'Advocacia' }).join('\n');
