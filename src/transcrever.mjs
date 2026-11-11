@@ -105,17 +105,40 @@ export async function whisperArquivo(video, { bin, modelo, idioma = 'auto', run 
  */
 export async function transcrever(candidato, env, deps = {}) {
   const run = deps.run || executar;
+  let motivoLegenda = null;
   if (candidato.fonte === 'youtube') {
-    const leg = await legendaYoutube(candidato.url, { run }).catch(() => null);
+    const leg = await legendaYoutube(candidato.url, { run }).catch((e) => {
+      motivoLegenda = ultimaLinha(e.message);
+      return null;
+    });
     if (leg) return leg;
+    motivoLegenda ??= 'o vídeo não tem legenda em português nem em inglês';
   }
   if (candidato.fonte === 'instagram' && !candidato.ehVideo) return null;
-  if ((env.TRANSCRICAO_REELS || 'whisper') !== 'whisper' || !deps.baixar) return null;
-  const video = await deps.baixar(candidato);
-  return whisperArquivo(video, {
-    bin: env.WHISPER_CPP_BIN || 'whisper-cli',
-    modelo: path.resolve(deps.raiz || '.', env.WHISPER_MODELO || 'modelos/ggml-base.bin'),
-    idioma: candidato.idioma?.slice(0, 2) || 'auto',
-    run,
-  });
+  const semWhisper = (env.TRANSCRICAO_REELS || 'whisper') !== 'whisper' || !deps.baixar;
+  if (semWhisper) {
+    if (motivoLegenda) throw new Error(`legenda do YouTube: ${motivoLegenda}`);
+    return null;
+  }
+  try {
+    const video = await deps.baixar(candidato);
+    return await whisperArquivo(video, {
+      bin: env.WHISPER_CPP_BIN || 'whisper-cli',
+      modelo: path.resolve(deps.raiz || '.', env.WHISPER_MODELO || 'modelos/ggml-base.bin'),
+      idioma: candidato.idioma?.slice(0, 2) || 'auto',
+      run,
+    });
+  } catch (e) {
+    const whisper = /Modelo do Whisper não encontrado/.test(e.message)
+      ? 'Whisper não instalado (rode o 3-instalar-whisper.bat)'
+      : `Whisper: ${ultimaLinha(e.message)}`;
+    throw new Error(motivoLegenda ? `legenda do YouTube: ${motivoLegenda}; ${whisper}` : whisper);
+  }
+}
+
+/** Última linha útil de uma mensagem de erro de programa (o yt-dlp põe o motivo no fim). */
+function ultimaLinha(msg) {
+  const linhas = String(msg).split('\n').map((l) => l.trim()).filter(Boolean);
+  const erro = [...linhas].reverse().find((l) => /^ERROR:|error/i.test(l)) || linhas[linhas.length - 1] || '';
+  return erro.replace(/^ERROR:\s*/, '').slice(0, 200);
 }

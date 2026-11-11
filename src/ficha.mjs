@@ -54,8 +54,10 @@ export async function sondar(video, { run = executar } = {}) {
 }
 
 /** Tempos dos cortes de cena (detector de cena do ffmpeg). */
-export async function detectarCortes(video, { limiar = 0.3, run = executar } = {}) {
+export async function detectarCortes(video, { limiar = 0.06, run = executar } = {}) {
   // showinfo escreve no stderr; o executar devolve só stdout, então redirecionamos com -f null e lemos o log.
+  // Limiar baixo de propósito: em vídeo de alguém falando para a câmera, o "corte seco"
+  // (mesmo enquadramento, trecho tirado) muda pouco a imagem; troca de cena muda muito.
   const log = await run('ffmpeg', [
     '-hide_banner', '-nostats', '-i', video,
     '-filter:v', `select='gt(scene,${limiar})',metadata=print:file=-`,
@@ -64,10 +66,20 @@ export async function detectarCortes(video, { limiar = 0.3, run = executar } = {
   return lerTemposDeCorte(log);
 }
 
-export function lerTemposDeCorte(log) {
+/**
+ * Lê os tempos do log do ffmpeg. Junta detecções a menos de `minimo` segundos uma da outra
+ * (um corte seco pode disparar em dois quadros seguidos; movimento rápido, em vários).
+ */
+export function lerTemposDeCorte(log, { minimo = 0.5 } = {}) {
   const tempos = [];
   for (const m of String(log).matchAll(/pts_time:([\d.]+)/g)) tempos.push(Number(m[1]));
-  return [...new Set(tempos.map((t) => Math.round(t * 100) / 100))].sort((a, b) => a - b);
+  const ordenados = [...new Set(tempos.map((t) => Math.round(t * 100) / 100))].sort((a, b) => a - b);
+  const cortes = [];
+  for (const t of ordenados) {
+    if (t < minimo) continue; // o primeiro quadro não é corte
+    if (!cortes.length || t - cortes[cortes.length - 1] >= minimo) cortes.push(t);
+  }
+  return cortes;
 }
 
 /** Extrai a capa e uma folha com um quadro do meio de cada plano (até 12). */
@@ -135,7 +147,9 @@ export function fichaEmMarkdown({ candidato: c, info, cortes, ritmo, trechos, ro
     `- **Autor:** ${c.canal}${c.seguidores ? ` (${c.seguidores.toLocaleString('pt-BR')} seguidores)` : ''}`,
     `- **Números:** ${c.comentarios?.toLocaleString('pt-BR') ?? '?'} comentários · ${c.views?.toLocaleString('pt-BR') ?? '?'} views · ${c.curtidas?.toLocaleString('pt-BR') ?? '?'} curtidas`,
     `- **Formato:** ${info.largura}×${info.altura} · ${info.fps} fps · ${s(info.segundos)}`,
-    `- **Ritmo:** ${ritmo.planos} planos · ${ritmo.cortesPorSegundo} cortes/s · plano médio ${ritmo.planoMedio}s · gancho até ${s(ritmo.gancho)}`,
+    cortes.length
+      ? `- **Ritmo:** ${ritmo.planos} planos · ${ritmo.cortesPorSegundo} cortes/s · plano médio ${ritmo.planoMedio}s · gancho até ${s(ritmo.gancho)}`
+      : '- **Ritmo:** plano único (câmera parada, fala direta)',
     `- **Cortes em:** ${cortes.map(s).join(' · ') || 'sem cortes (plano único)'}`,
     `- **Imagens:** \`${arquivos.capa}\` (capa) · \`${arquivos.folha}\` (um quadro por plano)`,
     '',
@@ -154,14 +168,28 @@ export function fichaEmMarkdown({ candidato: c, info, cortes, ritmo, trechos, ro
   return linhas.join('\n');
 }
 
+/** Formato de entrega: sempre o padrão do Reels, mesmo que a referência esteja em 4K. */
+export function formatoEntrega(info) {
+  const vertical = (info.altura || 0) >= (info.largura || 0);
+  return vertical ? '1080x1920 (9:16)' : `${info.largura}x${info.altura}`;
+}
+
 export function pedidoDeEdicao({ c, info, cortes, ritmo, roteiro }) {
+  const ritmoTexto = cortes.length
+    ? [
+        `- ${ritmo.planos} planos, um corte a cada ${ritmo.planoMedio}s em média; o primeiro corte em ${s(ritmo.gancho)} (é o fim do gancho).`,
+        `- Tempos dos cortes da referência: ${cortes.map(s).join(', ')}. Use como guia, ajustando às minhas frases.`,
+        '- A folha de planos anexa mostra o enquadramento de cada plano: repita a alternância (rosto, tela, objeto).',
+      ]
+    : [
+        '- A referência é um plano único: câmera parada, a pessoa falando direto para a câmera, sem troca de cena.',
+        '- Mantenha assim: só tire silêncios e erros, sem cortes de efeito. Se ficar longo, um zoom leve a cada frase ajuda a segurar.',
+      ];
   return [
     'Edite o meu vídeo bruto (anexo) no mesmo ritmo desta referência:',
     `Referência: ${c.url}`,
-    `- Formato vertical ${info.largura}x${info.altura}, duração final perto de ${s(info.segundos)}.`,
-    `- ${ritmo.planos} planos, um corte a cada ${ritmo.planoMedio}s em média; o primeiro corte em ${s(ritmo.gancho)} (é o fim do gancho).`,
-    `- Tempos dos cortes da referência: ${cortes.map(s).join(', ') || 'plano único'}. Use como guia, ajustando às minhas frases.`,
-    '- A folha de planos anexa mostra o enquadramento de cada plano: repita a alternância (rosto, tela, objeto).',
+    `- Formato vertical ${formatoEntrega(info)}, duração final perto de ${s(info.segundos)}.`,
+    ...ritmoTexto,
     roteiro?.frame0 ? `- Primeiro frame com o texto na tela: "${roteiro.frame0}".` : '',
     roteiro?.texto_tela?.length ? `- Cartelas na ordem da fala: ${roteiro.texto_tela.join(' / ')}.` : '',
     '- Legenda palavra por palavra, centralizada no terço inferior, com a palavra-chave destacada.',

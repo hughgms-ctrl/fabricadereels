@@ -172,6 +172,8 @@ export async function chamarSimulado(sistema, pedido) {
       itens: posts.map((p) => ({
         id: p.id,
         tema: /course/i.test(p.legenda) ? 'Lançamento de curso próprio' : 'Prompt que melhora as respostas do Claude',
+        // dois assuntos se alternando, para a seleção "um por assunto" ter o que escolher
+        grupo: /course/i.test(p.legenda) ? 'curso' : (p.autor || '').length % 2 ? 'prompts secretos' : 'memória do chatgpt',
         classe: /course/i.test(p.legenda) ? 'nao_serve' : 'adaptavel',
         adaptacao: /course/i.test(p.legenda) ? '' : 'O mesmo prompt aplicado a uma petição, com dados anonimizados',
         gatilho: /comment/i.test(p.legenda),

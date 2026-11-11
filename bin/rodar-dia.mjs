@@ -120,12 +120,36 @@ async function main() {
       baixados.set(c.id, v);
       return v;
     };
-    const topIG = listaIG.filter((c) => c.ehVideo && serve(c) && !jaUsados.has(c.id)).slice(0, trilha.instagram?.transcreverTop ?? 10);
-    const topYT = listaYT.filter((c) => serve(c) && !jaUsados.has(c.id)).slice(0, trilha.roteiros?.youtube ?? 1);
+    const poolIG = listaIG.filter((c) => c.ehVideo && serve(c) && !jaUsados.has(c.id));
+    const poolYT = listaYT.filter((c) => serve(c) && !jaUsados.has(c.id));
+
+    // Um roteiro por assunto: a classificação dá um "grupo" a cada post (ex.: "pix e receita",
+    // "perícia social"); se dois virais falam da mesma coisa, entra só o melhor colocado.
+    const gruposUsados = new Set();
+    const variar = (lista, n) => {
+      const out = [];
+      for (const c of lista) {
+        if (out.length >= n) break;
+        const g = String(classes.get(c.id)?.grupo || c.id).toLowerCase().trim();
+        if (gruposUsados.has(g)) continue;
+        gruposUsados.add(g);
+        out.push(c);
+      }
+      return out;
+    };
+    const escolhidosIG = variar(poolIG, trilha.roteiros?.instagram ?? 2);
+    const escolhidosYT = variar(poolYT, trilha.roteiros?.youtube ?? 1);
+    const topIG = poolIG.slice(0, trilha.instagram?.transcreverTop ?? 10);
+
     const transcricoes = [];
-    for (const c of [...topIG, ...topYT]) {
+    const paraTranscrever = [...new Map([...escolhidosIG, ...topIG, ...escolhidosYT].map((c) => [c.id, c])).values()];
+    for (const c of paraTranscrever) {
       const t = await transcrever(c, env, { raiz: RAIZ, run: deps.run, baixar })
-        .catch((e) => (log(`    transcrição ${c.canal}: ${e.message}`), null));
+        .catch((e) => {
+          log(`    transcrição ${c.canal}: ${e.message}`);
+          c.motivoSemTranscricao = e.message;
+          return null;
+        });
       if (t) {
         c.transcricao = t.texto;
         c.legendaBruta = t.bruta;
@@ -133,11 +157,8 @@ async function main() {
       }
     }
 
-    // ---- Roteiros: Instagram por comentários + YouTube por outlier ----
-    const escolhidos = [
-      ...topIG.slice(0, trilha.roteiros?.instagram ?? 2),
-      ...topYT,
-    ];
+    // ---- Roteiros: Instagram por comentários + YouTube por outlier, um por assunto ----
+    const escolhidos = [...escolhidosIG, ...escolhidosYT];
     const roteiros = [];
     for (const c of opc.semRoteiro ? [] : escolhidos) {
       log(`  · ${c.canal} · ${c.fonte === 'instagram' ? `${c.comentarios} comentários` : `${c.outlier.toFixed(1)}×`} · ${c.url}`);

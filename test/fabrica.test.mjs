@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mediana, duracaoIsoEmSegundos, contarPalavras, hojeSP } from '../src/util.mjs';
 import { outlier, ranquear, escolherVariados } from '../src/outlier.mjs';
-import { vttParaTexto, legendaYoutube } from '../src/transcrever.mjs';
+import { vttParaTexto, legendaYoutube, transcrever } from '../src/transcrever.mjs';
 import { extrairJson, validarRoteiro, montarPedido } from '../src/prompts.mjs';
 import { criarYoutube } from '../src/youtube.mjs';
 import fs from 'node:fs';
@@ -145,6 +145,30 @@ test('ficha: cortes, fala com tempos, ritmo e pedido de edição', () => {
   assert.match(pedido, /https:\/\/ref/);
   assert.match(pedido, /primeiro corte em 2\.0s/);
   assert.match(pedido, /COMENTA CASA/);
+});
+
+test('ficha: corte seco junta detecções próximas; plano único vira instrução de câmera parada', () => {
+  // dois quadros seguidos no mesmo corte + um quadro inicial: vira um corte só
+  assert.deepEqual(lerTemposDeCorte('pts_time:0.03\npts_time:2\npts_time:2.03\npts_time:2.06\npts_time:4\n'), [2, 4]);
+  const unico = pedidoDeEdicao({
+    c: { url: 'https://ref' }, info: { largura: 2160, altura: 3840, segundos: 27.9 }, cortes: [],
+    ritmo: resumoRitmo({ segundos: 27.9, cortes: [] }), roteiro: {},
+  });
+  assert.match(unico, /plano único/);
+  assert.match(unico, /1080x1920 \(9:16\)/);
+  assert.doesNotMatch(unico, /primeiro corte/);
+  assert.doesNotMatch(unico, /2160x3840/);
+});
+
+test('transcrição: o motivo da falha aparece (legenda do YouTube e Whisper ausente)', async () => {
+  const run = async (bin) => {
+    if (bin === 'yt-dlp') throw new Error('WARNING: x\nERROR: [youtube] abc: Sign in to confirm you’re not a bot');
+    return '';
+  };
+  await assert.rejects(
+    transcrever({ fonte: 'youtube', url: 'https://y' }, { TRANSCRICAO_REELS: 'whisper', WHISPER_MODELO: '/nao/existe.bin' }, { run, baixar: async () => '/tmp/v.mp4' }),
+    /legenda do YouTube: \[youtube\] abc: Sign in to confirm.*Whisper não instalado/,
+  );
 });
 
 test('ficha de ponta a ponta com ffmpeg de verdade', { skip: !temFfmpeg() }, async () => {

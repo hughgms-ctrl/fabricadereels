@@ -38,7 +38,7 @@ export function roteiroEmMarkdown(item, i) {
     '### Mensagem de entrega (DM)', '',
     '```', r.mensagem_dm || '', '```', '',
     `Para publicar no site: \`node bin/aprovar.mjs ${r.palavra_chave} --publicar\``, '',
-    `<details><summary>Transcrição do original</summary>\n\n${transcricao || '(sem transcrição)'}\n\n</details>`, '',
+    `<details><summary>Transcrição do original</summary>\n\n${transcricao || `(sem transcrição${c.motivoSemTranscricao ? `: ${c.motivoSemTranscricao}` : ''})`}\n\n</details>`, '',
   );
   return linhas.join('\n');
 }

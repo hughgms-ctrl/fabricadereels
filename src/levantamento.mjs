@@ -13,7 +13,10 @@ Para cada post, a partir da legenda (e da transcrição, quando houver), devolva
 - "adaptacao": em UMA linha, como vira um reel para o público da trilha (vazio se "nao_serve").
 - "gatilho": true se o post pede para comentar uma palavra ("comment X", "comenta X").
 - "idioma": "pt", "en", "hi", "es" ou outro código, pelo idioma da legenda e da fala.
-Não invente: use só o texto recebido. Responda SOMENTE com JSON: {"itens":[{"id":"","tema":"","classe":"","adaptacao":"","gatilho":false,"idioma":""}]}`;
+- "grupo": o assunto em 1 a 3 palavras, minúsculas (ex.: "pix e receita", "perícia social", "aposentado na casa",
+  "prompts secretos", "memória do chatgpt"). Posts sobre a MESMA coisa recebem EXATAMENTE o mesmo grupo,
+  mesmo que o ângulo seja diferente. É isso que evita dois roteiros iguais no mesmo dia.
+Não invente: use só o texto recebido. Responda SOMENTE com JSON: {"itens":[{"id":"","tema":"","grupo":"","classe":"","adaptacao":"","gatilho":false,"idioma":""}]}`;
 
 export function pedidoLevantamento(trilha, candidatos) {
   const linhas = candidatos.map((c) => ({
