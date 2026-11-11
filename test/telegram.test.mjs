@@ -162,3 +162,17 @@ test('instagram: para ao bater o limite da Meta (código 4) ou quando o medidor 
   assert.equal(r2.freado, true);
   assert.equal(ig2.chamadas(), 1);
 });
+
+test('instagram: a leitura para antes e sobra limite para descobrir perfis novos', async () => {
+  const base = criarFetchSimulado();
+  let uso = 0;
+  const medidor = async (u) => {
+    const r0 = await base(u);
+    uso += 30; // cada leitura gasta 30% do limite
+    return { ...r0, headers: new Map([['x-app-usage', JSON.stringify({ call_count: uso })]]) };
+  };
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: medidor, limiteUso: 80, reservaAmpliacao: 15 });
+  const r = await ig.minerar({ instagram: { perfis: ['a', 'b', 'c'], rodadasDeAmpliacao: 1, minimoSeguidores: 1 } }, { memoria: { perfis: {} } });
+  assert.equal(r.perfisLidos, 1); // "a" (2 páginas) levou o uso a 60%; ler "b" passaria dos 65%
+  assert.deepEqual(r.descobertosHoje.map((d) => d.username), ['parceiro_grande']); // a reserva pagou a descoberta
+});

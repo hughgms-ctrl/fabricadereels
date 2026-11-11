@@ -24,7 +24,7 @@ const CAMPOS_MIDIA = [
  *
  * Business Discovery só lê contas profissionais (criador ou empresa).
  */
-export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, pausaMs = 1500, limiteUso = 80 }) {
+export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, pausaMs = 1500, limiteUso = 80, reservaAmpliacao = 15 }) {
   if (!igUserId || !token) throw new Error('Faltam IG_USER_ID e IG_ACCESS_TOKEN no .env');
   let chamadas = 0;
   let usoMaximo = 0; // % do limite por hora que a Meta informa no cabeçalho de cada resposta
@@ -51,6 +51,13 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
   }
 
   const podeChamar = () => !freado && usoMaximo < limiteUso && chamadas < LIMITE_POR_RODADA;
+  // A leitura dos perfis para antes, deixando uma parte do limite para descobrir perfis novos
+  // (os @ citados): sem isso, a ampliação nunca rodaria nos dias em que a leitura gasta tudo.
+  // Custo de um perfil = média do quanto o medidor subiu em cada perfil já lido nesta rodada.
+  let custoTotal = 0;
+  let perfisMedidos = 0;
+  const custoMedio = () => (perfisMedidos ? custoTotal / perfisMedidos : 0);
+  const podeLer = () => podeChamar() && usoMaximo + custoMedio() < limiteUso - reservaAmpliacao;
 
   async function get(caminho, params) {
     if (!podeChamar()) throw new Error(`limite da Meta: pausado para não estourar (uso ${usoMaximo}%)`);
@@ -148,9 +155,12 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
         if (vistos.has(username)) continue;
         vistos.add(username);
         let p = null;
-        if (lidos.size < maxLeituras && podeChamar()) {
+        if (lidos.size < maxLeituras && podeLer()) {
           try {
+            const antes = usoMaximo;
             p = await perfil(username, { desdeMs });
+            custoTotal += Math.max(0, usoMaximo - antes);
+            perfisMedidos++;
             lidos.add(username);
             memoria.perfis[username] = {
               ...memoria.perfis[username],
