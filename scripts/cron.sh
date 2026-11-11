@@ -1,14 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Chamado pelo cron todo dia. O cron do Termux roda com PATH mínimo: por isso o export.
-export PATH="/data/data/com.termux/files/usr/bin:$HOME/.local/bin:$PATH"
 cd "$(dirname "$0")/.." || exit 1
+export PATH="$(pwd)/.venv/bin:/data/data/com.termux/files/usr/bin:$HOME/.local/bin:$PATH"
 mkdir -p logs
 LOG="logs/$(date +%F).log"
 
+# Liga a trava de "não dormir" e NUNCA desliga: ela vale para o Termux inteiro, e soltá-la
+# deixaria o celular dormir com os seus outros projetos rodando.
 command -v termux-wake-lock >/dev/null && termux-wake-lock
-node bin/rodar-dia.mjs >>"$LOG" 2>&1
+# Prioridade baixa: se o celular estiver ocupado com outro projeto, a fábrica cede a vez.
+nice -n 10 node bin/rodar-dia.mjs >>"$LOG" 2>&1
 STATUS=$?
-command -v termux-wake-unlock >/dev/null && termux-wake-unlock
 
 # Com o app Termux:API instalado, avisa no celular quando terminar.
 if command -v termux-notification >/dev/null; then

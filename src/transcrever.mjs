@@ -6,9 +6,17 @@ import { promisify } from 'node:util';
 
 const execFileP = promisify(execFile);
 
+const VENV_YTDLP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '.venv', 'bin', 'yt-dlp');
+
+/** yt-dlp da própria fábrica (.venv) quando existir; senão o do sistema. */
+export function binario(bin) {
+  if (bin === 'yt-dlp') return process.env.YTDLP_BIN || (fs.existsSync(VENV_YTDLP) ? VENV_YTDLP : 'yt-dlp');
+  return bin;
+}
+
 /** Executa um programa e devolve stdout. Separado para os testes trocarem. */
 export async function executar(bin, args, opcoes = {}) {
-  const { stdout } = await execFileP(bin, args, { maxBuffer: 50 * 1024 * 1024, timeout: 10 * 60 * 1000, ...opcoes });
+  const { stdout } = await execFileP(binario(bin), args, { maxBuffer: 50 * 1024 * 1024, timeout: 10 * 60 * 1000, ...opcoes });
   return stdout;
 }
 
