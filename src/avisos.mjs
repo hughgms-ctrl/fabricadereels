@@ -85,8 +85,14 @@ export function msgRoteiro(item) {
   const { candidato: c, roteiro: r, problemas = [] } = item;
   if (r.serve === false) return [`✖️ Pauta descartada pelo roteirista: ${esc(r.motivo)}\n${link(c.url, c.canal)}`];
   const numeros = c.fonte === 'instagram' ? `${fmt(c.comentarios)} comentários` : `${fmt(c.views)} views · ${c.outlier?.toFixed(0)}×`;
+  const tema = item.classe?.tema;
   const blocos = [
     `✍️ <b>Comenta ${esc(r.palavra_chave)}</b>\nReferência: ${link(c.url, c.canal)} · ${numeros}${item.ajuste ? `\n<i>Ajustado: ${esc(item.ajuste)}</i>` : ''}`,
+    [
+      tema ? `<b>Tema do original:</b> ${esc(tema)}` : '',
+      r.por_que_viralizou ? `<b>Por que viralizou:</b> ${esc(r.por_que_viralizou)}` : '',
+      item.classe?.adaptacao ? `<b>Ideia para o seu público:</b> ${esc(item.classe.adaptacao)}` : '',
+    ].filter(Boolean).join('\n'),
     `<b>Frame 0:</b> ${esc(r.frame0)}`,
     `<b>Fala</b> (${r.fala.split(/\s+/).length} palavras):\n${esc(r.fala)}`,
     `<b>Texto na tela:</b> ${esc((r.texto_tela || []).join(' → '))}`,
@@ -104,8 +110,19 @@ export function msgRoteiro(item) {
 
 export function msgEdicao(item) {
   const { candidato: c, roteiro: r, ficha } = item;
-  const legenda = `🎬 <b>${esc(r.palavra_chave)}</b> · referência: ${link(c.url, c.canal)}\nFolha de planos: um quadro de cada plano do original.`;
-  const blocos = [];
+  const numeros = c.fonte === 'instagram' ? `${fmt(c.comentarios)} comentários` : `${fmt(c.views)} views`;
+  const tema = item.classe?.tema || c.titulo || '';
+  const legenda = [
+    `🎬 <b>${esc(r.palavra_chave)}</b> · ${link(c.url, c.canal)} · ${numeros}`,
+    tema ? `<b>Tema:</b> ${esc(tema.slice(0, 300))}` : '',
+    'Imagem: um quadro de cada plano do vídeo original.',
+  ].filter(Boolean).join('\n');
+  // A mensagem da Edição se basta: tema, o seu roteiro e como editar, sem trocar de tópico.
+  const blocos = [
+    `<b>O que você vai gravar</b> (roteiro completo no tópico Roteiro)\n<b>Frame 0:</b> ${esc(r.frame0)}`,
+    `<b>Fala:</b>\n${esc(r.fala)}`,
+    `<b>Cartelas:</b> ${esc((r.texto_tela || []).join(' → '))}`,
+  ];
   if (ficha?.ritmo) {
     const rt = ficha.ritmo;
     blocos.push(ficha.cortes?.length
