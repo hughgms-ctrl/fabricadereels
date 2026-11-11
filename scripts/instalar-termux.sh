@@ -70,7 +70,11 @@ chmod +x scripts/*.sh bin/*.mjs
 mkdir -p logs data
 
 echo "▶ Agendamento diário (cron)"
-if pgrep -x crond >/dev/null 2>&1; then
+rodando() { # sem depender do pgrep, que nem todo Termux tem
+  for c in /proc/[0-9]*/comm; do [[ "$(cat "$c" 2>/dev/null)" == "$1" ]] && return 0; done
+  return 1
+}
+if rodando crond; then
   echo "  ✓ crond já está rodando: não ligo outro (senão as tarefas rodariam duas vezes)"
 else
   sv-enable crond 2>/dev/null || echo "  Feche e abra o Termux uma vez e rode de novo para ligar o crond."

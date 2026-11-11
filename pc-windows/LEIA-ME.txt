@@ -1,0 +1,28 @@
+﻿FÁBRICA DE REELS · ATALHOS PARA O PC (Windows)
+==============================================
+
+Cada arquivo .bat entra no Termux do celular pelo SSH (via Tailscale) e faz uma etapa.
+É só clicar duas vezes. Precisa: Tailscale ligado no PC e no celular, Termux aberto
+e o sshd rodando no Termux (porta 8022).
+
+PRIMEIRA VEZ, NA ORDEM
+  0-configurar.bat          IP do celular no Tailscale, usuário do Termux e porta. Testa a conexão.
+  1-entrar-sem-senha.bat    (opcional) cria uma chave e para de pedir senha.
+  2-instalar.bat            baixa e instala a fábrica no celular, sem mexer nos outros projetos.
+  4-chaves.bat              abre o .env para colar a chave do YouTube (Ctrl+O, Enter, Ctrl+X).
+  5-login-claude.bat        faz login do Claude Code no celular (uma vez).
+  6-testar.bat              teste sem gastar nada. Tem que dar "pass 20" e "fail 0".
+  7-rodar-agora.bat         primeira rodada de verdade (escolha 2 = previdenciário só com YouTube).
+
+DEPOIS, NO DIA A DIA
+  8-baixar-relatorio.bat    traz o relatório do dia para a pasta "relatorios" deste PC e abre.
+  9-aprovar-e-publicar.bat  aprova uma palavra e publica a página dela no site.
+  10-ver-log.bat            ver se a rodada automática das 06:17 deu certo.
+  11-atualizar.bat          baixar a versão nova quando eu fizer ajustes.
+  12-terminal.bat           terminal do celular, para qualquer outra coisa.
+
+  3-instalar-whisper.bat    quando for usar o Instagram: instala a transcrição dos reels
+                            (10 a 30 min compilando no celular).
+
+As chaves ficam só no celular, no arquivo .env. Nunca mande chave por chat.
+O config.txt desta pasta guarda só IP, usuário e porta (sem senha).

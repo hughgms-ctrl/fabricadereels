@@ -6,3 +6,5 @@ modelos/
 logs/
 .venv/
 .whisper.cpp/
+pc-windows/config.txt
+pc-windows/relatorios/
