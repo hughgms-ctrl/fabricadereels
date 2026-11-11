@@ -10,6 +10,6 @@
   "scripts": {
     "dia": "node bin/rodar-dia.mjs",
     "simular": "node bin/rodar-dia.mjs --simular",
-    "test": "node --test-reporter=tap test/fabrica.test.mjs"
+    "test": "node --test-reporter=tap test/todos.mjs"
   }
 }

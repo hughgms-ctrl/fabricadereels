@@ -2,27 +2,51 @@
   "sites": [
     {
       "id": "advocacia",
-      "trilhas": ["previdenciario"],
+      "trilhas": [
+        "previdenciario"
+      ],
       "titulo": "Materiais gratuitos · Direito previdenciário",
       "descricao": "Checklists e passo a passos para quem lida com o INSS, o BPC/LOAS e a aposentadoria.",
       "assinatura": "Seu nome · OAB/UF 000.000",
       "instagram": "",
       "whatsapp": "",
       "webhookLead": "",
-      "cores": { "fundo": "#F6F4EF", "superficie": "#FFFFFF", "texto": "#1C1B19", "suave": "#5E5A52", "linha": "#E2DDD2", "destaque": "#1F3A5F", "destaqueSuave": "#E6ECF4" },
-      "aviso": "Este material é informativo e não substitui a análise do seu caso. Provimento 205/2021 do CFOAB."
+      "cores": {
+        "fundo": "#F6F4EF",
+        "superficie": "#FFFFFF",
+        "texto": "#1C1B19",
+        "suave": "#5E5A52",
+        "linha": "#E2DDD2",
+        "destaque": "#1F3A5F",
+        "destaqueSuave": "#E6ECF4"
+      },
+      "aviso": "Este material é informativo e não substitui a análise do seu caso. Provimento 205/2021 do CFOAB.",
+      "dominio": "",
+      "grupoTelegram": "Advocacia"
     },
     {
       "id": "ia",
-      "trilhas": ["ia-advogados"],
-      "titulo": "IA para advogados · Pakki",
+      "trilhas": [
+        "ia-advogados"
+      ],
+      "titulo": "IA para advogados · Hugo",
       "descricao": "Prompts, rotinas e passo a passos para usar Claude e ChatGPT no escritório, com sigilo e LGPD.",
-      "assinatura": "Pakki",
+      "assinatura": "Hugo · Especialista em IA",
       "instagram": "",
       "whatsapp": "",
       "webhookLead": "",
-      "cores": { "fundo": "#0F1115", "superficie": "#171A21", "texto": "#ECEEF3", "suave": "#A2A8B5", "linha": "#2A2F3A", "destaque": "#8B7CF6", "destaqueSuave": "#221F3A" },
-      "aviso": "Material informativo. Nunca cole dados de cliente em IA sem anonimizar."
+      "cores": {
+        "fundo": "#0F1115",
+        "superficie": "#171A21",
+        "texto": "#ECEEF3",
+        "suave": "#A2A8B5",
+        "linha": "#2A2F3A",
+        "destaque": "#8B7CF6",
+        "destaqueSuave": "#221F3A"
+      },
+      "aviso": "Material informativo. Nunca cole dados de cliente em IA sem anonimizar.",
+      "dominio": "",
+      "grupoTelegram": "Hugo Especialista em IA"
     }
   ]
 }

@@ -1,39 +1,40 @@
 #!/usr/bin/env node
 /**
- * Rotina do dia, para o cron do Termux. Para cada trilha:
+ * Rotina do dia, para o cron do Termux. Para cada trilha, em etapas:
  *
- *  INSTAGRAM (métrica principal: COMENTÁRIOS) — o mesmo processo do levantamento de 11/11:
- *   1. perfis grandes da trilha + os descobertos em dias anteriores;
- *   2. amplia com os @ citados nas legendas que tenham +50 mil seguidores (2 rodadas);
- *   3. posts dos últimos 90 dias de todos;
- *   4. só os que passaram do corte de comentários, do maior pro menor;
- *   5. tema em uma linha + classificação (direto / adaptável / não serve);
- *   6. baixa e transcreve os 10 primeiros vídeos que servem.
- *  YOUTUBE (métrica principal: OUTLIER) — Shorts acima de N× a mediana do próprio canal.
+ *  0. MAPEAMENTO
+ *     Instagram (métrica principal: COMENTÁRIOS), o processo do levantamento de 11/11:
+ *       perfis grandes + @ citados com 50 mil+ seguidores (2 rodadas), posts de 90 dias,
+ *       corte de comentários do maior pro menor.
+ *     YouTube (métrica principal: OUTLIER): Shorts acima de N× a mediana do próprio canal.
+ *     Classificação: tema em uma linha, assunto, classe, idioma. Transcrição do top 10.
+ *  1. PAUTAS   lista numerada do que serve, guardada para o "roteiro 4" do Telegram.
+ *  2. ROTEIRO  um por assunto, automático: roteiro + material + DM (formato do Kit).
+ *  3. EDIÇÃO   ficha da referência: link, cortes, ritmo, folha de planos e pedido de edição.
+ *  (4. PUBLICAÇÃO só com a sua aprovação: bin/aprovar.mjs PALAVRA --publicar)
  *
- *  Depois: roteiro no formato do Kit + material + DM + ficha de edição da referência
- *  (cortes, ritmo, capa, folha de planos e o pedido pronto para o Claude editar igual).
- *  Salva em data/dias/AAAA-MM-DD/<trilha>.md.
+ *  Tudo vai para data/dias/AAAA-MM-DD/<trilha>.md e, se o Telegram estiver ligado
+ *  (13-telegram.bat), para os tópicos do grupo da trilha.
  *
- * Uso:  node bin/rodar-dia.mjs [--trilha id] [--simular] [--sem-roteiro] [--sem-ficha]
+ * Uso:  node bin/rodar-dia.mjs [--trilha id] [--simular] [--sem-roteiro] [--sem-ficha] [--sem-telegram]
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import { RAIZ, carregarEnv, lerJson, gravarJson, hojeSP, log } from '../src/util.mjs';
 import { criarYoutube } from '../src/youtube.mjs';
 import { criarInstagram, selecionarPorComentarios } from '../src/instagram.mjs';
 import { ranquear } from '../src/outlier.mjs';
-import { transcrever } from '../src/transcrever.mjs';
-import { escreverRoteiro, chamarClaude } from '../src/roteiro.mjs';
+import { chamarClaude } from '../src/roteiro.mjs';
 import { classificar, tabelaLevantamento } from '../src/levantamento.mjs';
-import { baixarVideo, montarFicha } from '../src/ficha.mjs';
 import { relatorioDoDia, salvarRelatorio } from '../src/saida.mjs';
+import { criarBaixador, garantirTranscricao, produzirRoteiro, salvarPautas } from '../src/etapas.mjs';
+import { criarAvisos, msgMapeamento, msgPautas, msgRoteiro, msgEdicao } from '../src/avisos.mjs';
 
 const args = process.argv.slice(2);
 const opc = {
   simular: args.includes('--simular'),
   semRoteiro: args.includes('--sem-roteiro'),
   semFicha: args.includes('--sem-ficha'),
+  semTelegram: args.includes('--sem-telegram') || args.includes('--simular'),
   trilha: args.includes('--trilha') ? args[args.indexOf('--trilha') + 1] : null,
 };
 
@@ -50,6 +51,7 @@ async function main() {
   const chamar = deps.chamar || chamarClaude;
   const opcoesClaude = { bin: env.CLAUDE_BIN || 'claude', modelo: env.CLAUDE_MODELO || undefined };
   const base = opc.simular ? path.join(DADOS, 'simulacao', data) : path.join(DADOS, 'dias', data);
+  const avisosTg = opc.semTelegram ? null : criarAvisos({ raiz: RAIZ, env, log });
 
   const yt = env.YOUTUBE_API_KEY || deps.fetch
     ? criarYoutube({ chave: env.YOUTUBE_API_KEY || 'simulada', cacheCanais, fetch: deps.fetch })
@@ -70,24 +72,26 @@ async function main() {
     const memoria = lerJson(arqMemoria, { perfis: {} });
     const dirRefs = path.join(base, `${trilha.id}-referencias`);
     const jaUsados = new Set(Object.keys(usados.videos));
+    const enviar = (etapa, blocos, foto, legenda) => (avisosTg ? avisosTg.enviar(trilha.id, etapa, blocos, foto, legenda) : false);
 
-    // ---- Instagram: comentários ----
+    // ================= 0. MAPEAMENTO =================
     let listaIG = [];
     let descobertos = [];
     let chamadasIG = 0;
+    let perfisLidos = 0;
     if (ig && (trilha.instagram?.perfis?.length || Object.keys(memoria.perfis).length || trilha.instagram?.hashtags?.length)) {
       const r = await ig.minerar(trilha, { log, memoria }).catch((e) => (avisos.push(`Instagram: ${e.message}`), null));
       if (r) {
         listaIG = selecionarPorComentarios(r.candidatos, { minimoComentarios: trilha.instagram.minimoComentarios ?? 10000 });
         descobertos = r.descobertosHoje;
         chamadasIG = r.chamadas;
+        perfisLidos = r.perfisLidos;
         log(`  Instagram: ${r.perfisLidos} perfis, ${r.candidatos.length} posts em 90 dias, ${listaIG.length} acima de ${trilha.instagram.minimoComentarios} comentários, ${descobertos.length} perfis novos`);
       }
     } else if (ig) {
       avisos.push('Nenhum perfil de Instagram nesta trilha: preencha instagram.perfis em config/trilhas.json.');
     }
 
-    // ---- YouTube: outlier ----
     let listaYT = [];
     if (yt && trilha.youtube?.buscas?.length) {
       const c = await yt.minerar(trilha, { log }).catch((e) => (avisos.push(`YouTube: ${e.message}`), []));
@@ -96,7 +100,6 @@ async function main() {
       log(`  YouTube: ${c.length} Shorts, ${listaYT.length} acima de ${trilha.youtube.minimoOutlier}× a mediana do canal`);
     }
 
-    // ---- Tema em uma linha + classe (uma chamada ao Claude) ----
     const paraClassificar = [...listaIG.slice(0, 40), ...listaYT.slice(0, 20)];
     let classes = new Map();
     if (!opc.semRoteiro && paraClassificar.length) {
@@ -110,21 +113,14 @@ async function main() {
       if (k.classe === 'nao_serve') return false;
       return !idiomas?.length || !k.idioma || idiomas.includes(k.idioma);
     };
-
-    // ---- Transcrição do top (10 vídeos do Instagram que servem + YouTube escolhidos) ----
-    const baixados = new Map();
-    const baixar = async (c) => {
-      if (baixados.has(c.id)) return baixados.get(c.id);
-      const dir = path.join(dirRefs, c.id.replace(/[^a-z0-9]+/gi, '-'));
-      const v = await baixarVideo(c, dir, { env, run: deps.run, fetch: deps.fetchVideo });
-      baixados.set(c.id, v);
-      return v;
-    };
     const poolIG = listaIG.filter((c) => c.ehVideo && serve(c) && !jaUsados.has(c.id));
     const poolYT = listaYT.filter((c) => serve(c) && !jaUsados.has(c.id));
 
-    // Um roteiro por assunto: a classificação dá um "grupo" a cada post (ex.: "pix e receita",
-    // "perícia social"); se dois virais falam da mesma coisa, entra só o melhor colocado.
+    // ================= 1. PAUTAS =================
+    // Numeradas na ordem da métrica: Instagram por comentários, depois YouTube por outlier.
+    const pautas = [...poolIG, ...poolYT].map((c, i) => ({ numero: i + 1, candidato: c, classe: classes.get(c.id) || null }));
+
+    // Um roteiro por assunto: se dois virais falam da mesma coisa, entra só o melhor colocado.
     const gruposUsados = new Set();
     const variar = (lista, n) => {
       const out = [];
@@ -137,59 +133,48 @@ async function main() {
       }
       return out;
     };
-    const escolhidosIG = variar(poolIG, trilha.roteiros?.instagram ?? 2);
-    const escolhidosYT = variar(poolYT, trilha.roteiros?.youtube ?? 1);
-    const topIG = poolIG.slice(0, trilha.instagram?.transcreverTop ?? 10);
+    const escolhidos = opc.semRoteiro ? [] : [
+      ...variar(poolIG, trilha.roteiros?.instagram ?? 2),
+      ...variar(poolYT, trilha.roteiros?.youtube ?? 1),
+    ];
 
+    // Transcrição: os escolhidos + o top 10 do Instagram (vai no relatório para leitura).
+    const { baixar, limpar } = criarBaixador({ dirRefs, env, deps });
     const transcricoes = [];
-    const paraTranscrever = [...new Map([...escolhidosIG, ...topIG, ...escolhidosYT].map((c) => [c.id, c])).values()];
+    const paraTranscrever = [...new Map([...escolhidos, ...poolIG.slice(0, trilha.instagram?.transcreverTop ?? 10)].map((c) => [c.id, c])).values()];
     for (const c of paraTranscrever) {
-      const t = await transcrever(c, env, { raiz: RAIZ, run: deps.run, baixar })
-        .catch((e) => {
-          log(`    transcrição ${c.canal}: ${e.message}`);
-          c.motivoSemTranscricao = e.message;
-          return null;
-        });
-      if (t) {
-        c.transcricao = t.texto;
-        c.legendaBruta = t.bruta;
-        transcricoes.push({ candidato: c, texto: t.texto, origem: t.origem });
-      }
+      await garantirTranscricao(c, { env, raiz: RAIZ, deps, baixar, log });
+      if (c.transcricao) transcricoes.push({ candidato: c, texto: c.transcricao, origem: c.origemTranscricao });
     }
+    if (!opc.simular) salvarPautas(base, trilha.id, pautas);
 
-    // ---- Roteiros: Instagram por comentários + YouTube por outlier, um por assunto ----
-    const escolhidos = [...escolhidosIG, ...escolhidosYT];
+    await enviar('mapeamento', msgMapeamento({
+      trilha, data, perfisLidos, descobertos, listaIG, listaYT, servem: pautas.length, avisos,
+    }));
+    await enviar('pautas', msgPautas({ trilha, data, pautas: pautas.slice(0, 15), comRoteiroHoje: new Set(escolhidos.map((c) => c.id)) }));
+
+    // ================= 2. ROTEIRO + 3. EDIÇÃO =================
     const roteiros = [];
-    for (const c of opc.semRoteiro ? [] : escolhidos) {
+    for (const c of escolhidos) {
       log(`  · ${c.canal} · ${c.fonte === 'instagram' ? `${c.comentarios} comentários` : `${c.outlier.toFixed(1)}×`} · ${c.url}`);
       try {
-        const k = classes.get(c.id);
-        const contexto = k ? { ...c, titulo: `${c.titulo}\nTema: ${k.tema}\nComo adaptar: ${k.adaptacao}` } : c;
-        const { roteiro, problemas } = await escreverRoteiro({
-          trilha, candidato: contexto, transcricao: c.transcricao || null,
-          palavrasUsadas: usados.palavras, env, chamar,
+        const item = await produzirRoteiro({
+          trilha, c, classe: classes.get(c.id) || null, env, deps, chamar, usados, dirRefs, base,
+          baixar, semFicha: opc.semFicha, data,
         });
-        const item = { candidato: c, classe: k, transcricao: c.transcricao || null, roteiro, problemas };
-        if (!opc.semFicha && roteiro.serve !== false && (c.ehVideo || c.fonte === 'youtube')) {
-          try {
-            const dir = path.join(dirRefs, c.id.replace(/[^a-z0-9]+/gi, '-'));
-            if (!baixados.has(c.id)) await baixar(c);
-            const ficha = await montarFicha(c, dir, { env, run: deps.run, fetch: deps.fetchVideo, legendaBruta: c.legendaBruta, roteiro });
-            item.fichaMd = ficha.markdown.replace(/`(capa\.jpg|planos\.jpg)`/g, (_, a) => `\`${path.relative(base, path.join(dir, a))}\``);
-            item.ficha = { info: ficha.info, cortes: ficha.cortes, ritmo: ficha.ritmo };
-          } catch (e) {
-            item.fichaMd = `> Ficha de edição indisponível: ${e.message}. Abra a referência: ${c.url}\n`;
-          }
-        }
         roteiros.push(item);
-        usados.videos[c.id] = { data, trilha: trilha.id, palavra: roteiro.palavra_chave || null };
-        if (roteiro.serve !== false && roteiro.palavra_chave) usados.palavras.push(roteiro.palavra_chave);
-        if (problemas.length) log(`    ⚠️ ${problemas.join('; ')}`);
+        if (item.problemas.length) log(`    ⚠️ ${item.problemas.join('; ')}`);
+        if (item.roteiro.serve !== false) {
+          await enviar('roteiro', msgRoteiro(item));
+          const ed = msgEdicao(item);
+          await enviar('edicao', ed.blocos, item.folhaDePlanos, ed.legenda);
+        }
       } catch (e) {
         falhas++;
         log(`    roteiro falhou: ${e.message}`);
       }
     }
+    limpar();
 
     const tabelaIG = listaIG.length || ig
       ? tabelaLevantamento(listaIG.slice(0, 40), classes, {
@@ -203,10 +188,6 @@ async function main() {
           linhaMetrica: 'Ordenado por outlier (views ÷ mediana dos Shorts recentes do canal).',
         })
       : '';
-    // Vídeos baixados só para transcrever (sem ficha) também saem: no relatório fica o link.
-    if (env.MANTER_VIDEO !== '1') {
-      for (const v of baixados.values()) fs.rmSync(v, { force: true });
-    }
     const md = salvarRelatorio(base, trilha.id, relatorioDoDia({
       data, trilha, tabelaIG, tabelaYT, roteiros, transcricoes, descobertos, avisos, cota: yt?.cota(), chamadasIG,
     }), { data, trilha: trilha.id, itens: roteiros });

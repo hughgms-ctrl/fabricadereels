@@ -21,6 +21,9 @@ DEPOIS, NO DIA A DIA
   11-atualizar.bat          baixar a versão nova quando eu fizer ajustes.
   12-terminal.bat           terminal do celular, para qualquer outra coisa.
 
+  13-telegram.bat           liga cada tópico dos grupos "Advocacia" e "Hugo Especialista em IA".
+  14-hermes.bat             ensina o Hermes a operar a fábrica pelo Telegram.
+
   3-instalar-whisper.bat    quando for usar o Instagram: instala a transcrição dos reels
                             (10 a 30 min compilando no celular).
 

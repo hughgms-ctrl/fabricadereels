@@ -10,8 +10,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { RAIZ, lerJson, gravarJson, log } from '../src/util.mjs';
+import { RAIZ, lerJson, gravarJson, log, carregarEnv } from '../src/util.mjs';
 import { slug } from '../src/sites.mjs';
+import { criarAvisos, msgPublicacao } from '../src/avisos.mjs';
 
 const args = process.argv.slice(2);
 const sites = lerJson(path.join(RAIZ, 'config', 'sites.json'), { sites: [] }).sites;
@@ -69,9 +70,16 @@ gravarJson(arquivo, {
   trilha: achado.trilha,
   aprovadoEm: new Date().toISOString(),
 });
+const url = site.dominio ? `${site.dominio.replace(/\/+$/, '').replace(/^(?!https?:\/\/)/, 'https://')}/${slug(palavra)}/` : null;
 log(`✔ ${palavra} aprovado em ${path.relative(RAIZ, arquivo)}`);
-log(`  Link para a DM: <seu domínio do site ${site.id}>/${slug(palavra)}/`);
+log(`  Link para a DM: ${url || `<domínio do site ${site.id}>/${slug(palavra)}/ (preencha "dominio" em config/sites.json)`}`);
 
 if (args.includes('--publicar')) {
   await import('./publicar.mjs');
+  carregarEnv();
+  await criarAvisos({ raiz: RAIZ, env: process.env, log }).enviar(
+    achado.trilha,
+    'publicacao',
+    msgPublicacao({ palavra, url, mensagemDm: r.mensagem_dm || '', site: site.titulo }),
+  );
 }

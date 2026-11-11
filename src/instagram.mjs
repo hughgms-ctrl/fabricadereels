@@ -95,7 +95,9 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
     const candidatos = [];
     const lidos = new Set();
     const descobertosHoje = [];
-    let fila = Object.keys(memoria.perfis);
+    // Perfis tirados pelo Telegram ("tira @x") ficam na memória com removido: true,
+    // para não serem lidos nem voltarem quando forem citados de novo.
+    let fila = Object.keys(memoria.perfis).filter((u) => !memoria.perfis[u]?.removido);
 
     for (let rodada = 0; rodada <= rodadas && fila.length; rodada++) {
       const citados = new Map();
