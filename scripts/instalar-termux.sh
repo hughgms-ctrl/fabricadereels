@@ -40,16 +40,13 @@ export PATH="$HOME/.local/bin:$PATH"
 CLAUDE="$(command -v claude || true)"
 if [[ -n "$CLAUDE" ]] && "$CLAUDE" --version >/dev/null 2>&1; then
   echo "  ✓ $("$CLAUDE" --version) em $CLAUDE: não mexo"
+elif [[ -x "$PREFIX/var/lib/proot-distro/installed-rootfs/debian/root/.local/bin/claude" ]]; then
+  CLAUDE="$PASTA/bin/claude-debian.sh"
+  echo "  ✓ Claude Code no Debian (proot): $CLAUDE"
 else
-  # O npm novo bloqueia o passo final da instalação do Claude Code; aqui ele é liberado só para esse pacote.
-  npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code \
-    || npm install -g @anthropic-ai/claude-code
-  CLAUDE="$(command -v claude || true)"
-  if [[ -n "$CLAUDE" ]] && "$CLAUDE" --version >/dev/null 2>&1; then
-    echo "  ✓ $("$CLAUDE" --version) em $CLAUDE"
-  else
-    echo "  ! O Claude Code não abriu. Rode o 12-terminal.bat e mande o resultado de: claude --version"
-  fi
+  # O Claude Code 2.x não roda direto no Android; ele vai num Debian leve dentro do Termux.
+  CLAUDE=""
+  echo "  ! Falta o Claude Code: rode o 5-login-claude.bat (instala no Debian do Termux e faz o login)"
 fi
 
 if [[ "${1:-}" == "--whisper" ]]; then
@@ -86,9 +83,9 @@ chmod +x scripts/*.sh bin/*.mjs
 mkdir -p logs data
 
 echo "▶ Agendamento diário (cron)"
-rodando() { # sem depender do pgrep, que nem todo Termux tem
-  for c in /proc/[0-9]*/comm; do [[ "$(cat "$c" 2>/dev/null)" == "$1" ]] && return 0; done
-  return 1
+rodando() { # pelo serviço (sv); o Android não deixa listar os processos por /proc
+  sv status "$1" 2>/dev/null | grep -q '^run:' && return 0
+  [[ -f "$PREFIX/var/run/$1.pid" ]] && kill -0 "$(cat "$PREFIX/var/run/$1.pid")" 2>/dev/null
 }
 if rodando crond; then
   echo "  ✓ crond já está rodando: não ligo outro (senão as tarefas rodariam duas vezes)"
@@ -96,7 +93,13 @@ else
   # Liga junto com o Termux daqui pra frente e, se ainda não subiu, liga agora.
   sv-enable crond >/dev/null 2>&1 || true
   sleep 2
-  if ! rodando crond; then crond 2>/dev/null || true; fi
+  if ! rodando crond; then
+    # Liga o gerenciador de serviços sem reiniciar o Termux (reiniciar pararia os outros projetos).
+    service-daemon start >/dev/null 2>&1 || true
+    sleep 2
+    sv up crond >/dev/null 2>&1 || true
+    sleep 2
+  fi
   if rodando crond; then echo "  ✓ crond ligado"; else echo "  ! crond não ligou: feche e abra o Termux e rode o 2-instalar.bat de novo"; fi
 fi
 LINHA="17 6 * * * $PASTA/scripts/cron.sh"
