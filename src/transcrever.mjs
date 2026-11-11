@@ -46,6 +46,12 @@ export function vttParaTexto(vtt) {
   return linhas.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Liga quando o YouTube responde 429 (muitas requisições): o resto da rodada usa o Whisper. */
+let legendasBloqueadas = false;
+export const reiniciarBloqueioDeLegendas = () => {
+  legendasBloqueadas = false;
+};
+
 /** YouTube: legenda (manual ou automática) via yt-dlp, sem baixar o vídeo. Custo zero. */
 export async function legendaYoutube(url, { idiomas = 'pt.*,pt,en.*,en', run = executar } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'leg-'));
@@ -106,9 +112,13 @@ export async function whisperArquivo(video, { bin, modelo, idioma = 'auto', run 
 export async function transcrever(candidato, env, deps = {}) {
   const run = deps.run || executar;
   let motivoLegenda = null;
-  if (candidato.fonte === 'youtube') {
+  if (candidato.fonte === 'youtube' && legendasBloqueadas) {
+    // O YouTube já respondeu 429 nesta rodada: insistir só piora. Vai direto para o Whisper.
+    motivoLegenda = 'YouTube limitou as legendas nesta rodada (429)';
+  } else if (candidato.fonte === 'youtube') {
     const leg = await legendaYoutube(candidato.url, { run }).catch((e) => {
       motivoLegenda = ultimaLinha(e.message);
+      if (/\b429\b|Too Many Requests/i.test(e.message)) legendasBloqueadas = true;
       return null;
     });
     if (leg) return leg;

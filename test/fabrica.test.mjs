@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mediana, duracaoIsoEmSegundos, contarPalavras, hojeSP } from '../src/util.mjs';
 import { outlier, ranquear, escolherVariados } from '../src/outlier.mjs';
-import { vttParaTexto, legendaYoutube, transcrever } from '../src/transcrever.mjs';
+import { vttParaTexto, legendaYoutube, transcrever, reiniciarBloqueioDeLegendas } from '../src/transcrever.mjs';
 import { extrairJson, validarRoteiro, montarPedido } from '../src/prompts.mjs';
 import { criarYoutube } from '../src/youtube.mjs';
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { criarInstagram, GRAPH_VERSAO, selecionarPorComentarios, arrobas } from '../src/instagram.mjs';
 import { escreverRoteiro } from '../src/roteiro.mjs';
-import { lerTemposDeCorte, trechosComTempo, resumoRitmo, pedidoDeEdicao, montarFicha } from '../src/ficha.mjs';
+import { lerTemposDeCorte, trechosComTempo, resumoRitmo, pedidoDeEdicao, montarFicha, baixarVideo, FORMATO_YTDLP } from '../src/ficha.mjs';
 import { classificar, tabelaLevantamento } from '../src/levantamento.mjs';
 import { materialEmHtml, slug, gerarSites } from '../src/sites.mjs';
 import { criarFetchSimulado, chamarSimulado, runSimulado, fetchVideoSimulado, VTT_EXEMPLO } from './simulacao.mjs';
@@ -97,7 +97,7 @@ test('YouTube sem chave avisa claramente', () => {
 test('Instagram: processo do levantamento (90 dias paginados + ampliação por @ citados com 50 mil+)', async () => {
   const urls = [];
   const f = criarFetchSimulado();
-  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: (u) => (urls.push(decodeURIComponent(String(u))), f(u)) });
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: (u) => (urls.push(decodeURIComponent(String(u))), f(u)) });
   const memoria = { perfis: {} };
   const r = await ig.minerar(
     { instagram: { perfis: ['@MavGPT'], janelaDias: 90, minimoSeguidores: 50000, rodadasDeAmpliacao: 2 } },
@@ -115,7 +115,7 @@ test('Instagram: processo do levantamento (90 dias paginados + ampliação por @
 });
 
 test('Instagram: comentário é a métrica principal (corte absoluto, maior pro menor)', async () => {
-  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: criarFetchSimulado() });
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
   const r = await ig.minerar({ instagram: { perfis: ['a', 'b'], rodadasDeAmpliacao: 0 } }, { memoria: { perfis: {} } });
   const lista = selecionarPorComentarios(r.candidatos, { minimoComentarios: 10000 });
   assert.deepEqual(lista.map((c) => c.comentarios), [40000, 40000, 12000, 12000]);
@@ -274,4 +274,41 @@ test('o pedido leva números, transcrição e palavras já usadas', () => {
   assert.match(p, /3 palavras na fala/);
   assert.match(p, /não repita\): CASA/);
   assert.equal(contarPalavras('  um  dois\ntrês '), 3);
+});
+
+test('download: pede vídeo com áudio ao yt-dlp e refaz quando o media_url vem mudo', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'baixar-'));
+  const chamadas = [];
+  const run = async (bin, args) => {
+    chamadas.push([bin, ...args]);
+    if (bin === 'ffprobe') return ''; // sem faixa de áudio
+    if (bin === 'yt-dlp') fs.writeFileSync(args[args.indexOf('-o') + 1], 'video');
+    return '';
+  };
+  const fetchMudo = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(4) });
+  const v = await baixarVideo({ fonte: 'instagram', url: 'https://ig/x', midiaUrl: 'https://cdn/x.mp4' }, dir, { run, fetch: fetchMudo });
+  const ytdlp = chamadas.find((c) => c[0] === 'yt-dlp');
+  assert.ok(ytdlp, 'devia ter caído no yt-dlp');
+  assert.equal(ytdlp[ytdlp.indexOf('-f') + 1], FORMATO_YTDLP);
+  assert.match(FORMATO_YTDLP, /\+ba/);
+  assert.ok(ytdlp.includes('--merge-output-format'));
+  assert.ok(fs.existsSync(v));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('transcrição: depois de um 429 do YouTube, os próximos vão direto ao Whisper', async () => {
+  reiniciarBloqueioDeLegendas();
+  const pedidosDeLegenda = [];
+  const run = async (bin, args) => {
+    if (bin === 'yt-dlp' && args.includes('--write-subs')) {
+      pedidosDeLegenda.push(1);
+      throw new Error('ERROR: Unable to download video subtitles for \'pt\': HTTP Error 429: Too Many Requests');
+    }
+    return '';
+  };
+  const env = { TRANSCRICAO_REELS: 'whisper', WHISPER_MODELO: '/nao/existe.bin' };
+  await assert.rejects(transcrever({ fonte: 'youtube', url: 'https://y/1' }, env, { run, baixar: async () => '/tmp/v' }), /429/);
+  await assert.rejects(transcrever({ fonte: 'youtube', url: 'https://y/2' }, env, { run, baixar: async () => '/tmp/v' }), /limitou as legendas/);
+  assert.equal(pedidosDeLegenda.length, 1);
+  reiniciarBloqueioDeLegendas();
 });

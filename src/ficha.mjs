@@ -13,7 +13,22 @@ import { executar } from './transcrever.mjs';
  *  - capa (quadro de 0,5 s) e folha com um quadro de cada plano
  */
 
-/** Baixa o vídeo: media_url direto da API quando vier; senão yt-dlp (Instagram pode pedir cookies). */
+/**
+ * Formato do yt-dlp: vídeo + ÁUDIO, juntos num mp4. YouTube e Instagram entregam os dois
+ * separados; pedir só "mp4" trazia o arquivo mudo e o Whisper não tinha o que transcrever.
+ */
+export const FORMATO_YTDLP = 'bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[acodec!=none]/b';
+
+export async function temAudio(video, { run = executar } = {}) {
+  try {
+    const s = await run('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', video]);
+    return String(s).trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Baixa o vídeo com áudio: media_url direto da API quando vier; senão yt-dlp (Instagram pode pedir cookies). */
 export async function baixarVideo(candidato, dir, { env = {}, run = executar, fetch: f = globalThis.fetch } = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const destino = path.join(dir, 'referencia.mp4');
@@ -23,13 +38,14 @@ export async function baixarVideo(candidato, dir, { env = {}, run = executar, fe
       const r = await f(candidato.midiaUrl);
       if (r.ok) {
         fs.writeFileSync(destino, Buffer.from(await r.arrayBuffer()));
-        return destino;
+        if (await temAudio(destino, { run })) return destino;
+        fs.rmSync(destino, { force: true }); // veio mudo: tenta pelo yt-dlp
       }
     } catch {
       /* cai no yt-dlp */
     }
   }
-  const args = ['-f', 'mp4/best', '-o', destino, '--no-playlist'];
+  const args = ['-f', FORMATO_YTDLP, '--merge-output-format', 'mp4', '-o', destino, '--no-playlist', '--retries', '3'];
   if (env.IG_COOKIES && candidato.fonte === 'instagram') args.push('--cookies', env.IG_COOKIES);
   await run('yt-dlp', [...args, candidato.url]);
   if (!fs.existsSync(destino)) throw new Error('vídeo não baixou');

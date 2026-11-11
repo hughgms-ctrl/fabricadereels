@@ -97,7 +97,7 @@ test('avisos: textos das etapas', async () => {
 });
 
 test('perfis: quem foi tirado pelo Telegram não é lido nem volta quando citado', async () => {
-  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: criarFetchSimulado() });
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
   const memoria = { perfis: { mavgpt: { removido: true } } };
   const r = await ig.minerar({ instagram: { perfis: ['mavgpt', 'outro'], rodadasDeAmpliacao: 1 } }, { memoria });
   assert.ok(r.candidatos.every((c) => c.canal !== '@mavgpt'));
@@ -117,4 +117,48 @@ test('etapas: roteiro pedido no Telegram entra no relatório do dia e é achado 
   assert.equal(achado.indice, 0);
   assert.match(fs.readFileSync(path.join(base, 'previdenciario.md'), 'utf8'), /Pedido no Telegram: pauta 4/);
   assert.equal(acharRoteiro(raiz, 'NAOEXISTE'), null);
+});
+
+test('instagram: rodízio diário e posts guardados mantêm o levantamento completo', async () => {
+  const memoria = { perfis: {} };
+  const trilha = { instagram: { perfis: ['a', 'b', 'c', 'd'], maxPerfisPorDia: 2, rodadasDeAmpliacao: 0 } };
+  const ig1 = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
+  const dia1 = await ig1.minerar(trilha, { memoria });
+  assert.equal(dia1.perfisLidos, 2);
+  assert.equal(dia1.perfisDoCache, 0);
+  assert.equal(dia1.perfisSemDados, 2);
+  // dia seguinte: lê os 2 que faltaram e usa os posts guardados dos outros 2
+  const ig2 = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
+  const dia2 = await ig2.minerar(trilha, { memoria, agoraData: new Date(Date.now() + 3600000) });
+  assert.equal(dia2.perfisLidos, 2);
+  assert.equal(dia2.perfisDoCache, 2);
+  assert.equal(new Set(dia2.candidatos.map((c) => c.canal)).size, 4);
+  assert.ok(memoria.perfis.a.midias.every((m) => !('media_url' in m)));
+});
+
+test('instagram: para ao bater o limite da Meta (código 4) ou quando o medidor passa de 80%', async () => {
+  const base = criarFetchSimulado();
+  let n = 0;
+  const fetchComLimite = async (u) => {
+    n++;
+    if (n > 2) return { ok: false, status: 400, headers: new Map(), json: async () => ({ error: { code: 4, message: 'Application request limit reached' } }) };
+    return base(u);
+  };
+  const logs = [];
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: fetchComLimite });
+  const r = await ig.minerar({ instagram: { perfis: ['a', 'b', 'c'], rodadasDeAmpliacao: 1 } }, { memoria: { perfis: {} }, log: (m) => logs.push(m) });
+  assert.equal(r.freado, true);
+  assert.equal(r.perfisLidos, 1); // "a" leu 2 páginas; "b" bateu no limite e parou ali
+  assert.ok(n <= 3, `fez ${n} chamadas depois do limite`);
+  assert.match(logs.join('\n'), /limite da Meta atingido/);
+
+  const medidor = async (u) => {
+    const r0 = await base(u);
+    return { ...r0, headers: new Map([['x-app-usage', JSON.stringify({ call_count: 10, total_cputime: 85, total_time: 20 })]]) };
+  };
+  const ig2 = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: medidor });
+  const r2 = await ig2.minerar({ instagram: { perfis: ['a', 'b'], rodadasDeAmpliacao: 0 } }, { memoria: { perfis: {} } });
+  assert.equal(r2.usoMeta, 85);
+  assert.equal(r2.freado, true);
+  assert.equal(ig2.chamadas(), 1);
 });

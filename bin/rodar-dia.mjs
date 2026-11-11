@@ -57,7 +57,7 @@ async function main() {
     ? criarYoutube({ chave: env.YOUTUBE_API_KEY || 'simulada', cacheCanais, fetch: deps.fetch })
     : null;
   const ig = (env.IG_USER_ID && env.IG_ACCESS_TOKEN) || deps.fetch
-    ? criarInstagram({ igUserId: env.IG_USER_ID || '1', token: env.IG_ACCESS_TOKEN || 'simulado', fetch: deps.fetch })
+    ? criarInstagram({ igUserId: env.IG_USER_ID || '1', token: env.IG_ACCESS_TOKEN || 'simulado', fetch: deps.fetch, pausaMs: deps.fetch ? 0 : 1500 })
     : null;
   const avisosGerais = [];
   if (!yt) avisosGerais.push('YOUTUBE_API_KEY ausente: YouTube pulado.');
@@ -85,8 +85,9 @@ async function main() {
         listaIG = selecionarPorComentarios(r.candidatos, { minimoComentarios: trilha.instagram.minimoComentarios ?? 10000 });
         descobertos = r.descobertosHoje;
         chamadasIG = r.chamadas;
-        perfisLidos = r.perfisLidos;
-        log(`  Instagram: ${r.perfisLidos} perfis, ${r.candidatos.length} posts em 90 dias, ${listaIG.length} acima de ${trilha.instagram.minimoComentarios} comentários, ${descobertos.length} perfis novos`);
+        perfisLidos = r.perfisLidos + r.perfisDoCache;
+        log(`  Instagram: ${r.perfisLidos} perfis lidos agora + ${r.perfisDoCache} com posts guardados, ${r.candidatos.length} posts em 90 dias, ${listaIG.length} acima de ${trilha.instagram.minimoComentarios} comentários, ${descobertos.length} perfis novos · uso do limite da Meta: ${r.usoMeta}%`);
+        if (r.freado) avisos.push(`Limite da Meta: parei para não estourar (uso ${r.usoMeta}%). ${r.perfisSemDados ? `${r.perfisSemDados} perfil(is) sem dados ainda: entram na próxima rodada.` : 'Os perfis que faltaram usaram os posts guardados.'}`);
       }
     } else if (ig) {
       avisos.push('Nenhum perfil de Instagram nesta trilha: preencha instagram.perfis em config/trilhas.json.');

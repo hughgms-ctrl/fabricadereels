@@ -24,18 +24,51 @@ const CAMPOS_MIDIA = [
  *
  * Business Discovery só lê contas profissionais (criador ou empresa).
  */
-export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch }) {
+export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, pausaMs = 1500, limiteUso = 80 }) {
   if (!igUserId || !token) throw new Error('Faltam IG_USER_ID e IG_ACCESS_TOKEN no .env');
   let chamadas = 0;
+  let usoMaximo = 0; // % do limite por hora que a Meta informa no cabeçalho de cada resposta
+  let freado = false;
+  const espera = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+  /** A Meta devolve o quanto do limite já foi usado (chamadas, CPU e tempo) em cada resposta. */
+  function lerUso(headers) {
+    for (const nome of ['x-app-usage', 'x-business-use-case-usage']) {
+      const bruto = headers?.get?.(nome);
+      if (!bruto) continue;
+      try {
+        const j = JSON.parse(bruto);
+        const grupos = nome === 'x-app-usage' ? [j] : Object.values(j).flat();
+        for (const g of grupos) {
+          for (const k of ['call_count', 'total_cputime', 'total_time']) {
+            if (Number.isFinite(g?.[k])) usoMaximo = Math.max(usoMaximo, g[k]);
+          }
+        }
+      } catch {
+        /* cabeçalho em formato inesperado: ignora */
+      }
+    }
+  }
+
+  const podeChamar = () => !freado && usoMaximo < limiteUso && chamadas < LIMITE_POR_RODADA;
 
   async function get(caminho, params) {
-    if (chamadas >= LIMITE_POR_RODADA) throw new Error('limite de chamadas da Meta nesta rodada');
+    if (!podeChamar()) throw new Error(`limite da Meta: pausado para não estourar (uso ${usoMaximo}%)`);
     const url = new URL(`${BASE}/${caminho}`);
     for (const [k, v] of Object.entries({ ...params, access_token: token })) url.searchParams.set(k, String(v));
+    if (chamadas > 0) await espera(pausaMs);
     chamadas++;
     const r = await f(url);
+    lerUso(r.headers);
     const corpo = await r.json().catch(() => ({}));
-    if (!r.ok || corpo.error) throw new Error(corpo?.error?.message || `HTTP ${r.status}`);
+    if (!r.ok || corpo.error) {
+      const codigo = corpo?.error?.code;
+      if ([4, 17, 32, 613, 80002].includes(codigo) || /request limit|rate limit/i.test(corpo?.error?.message || '')) {
+        freado = true;
+        throw new Error(`limite da Meta atingido (${corpo?.error?.message || codigo}): o resto fica para a próxima rodada`);
+      }
+      throw new Error(corpo?.error?.message || `HTTP ${r.status}`);
+    }
     return corpo;
   }
 
@@ -55,7 +88,7 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
       midias.push(...lote);
       depois = bd?.media?.paging?.cursors?.after;
       const maisVelho = lote.length ? Date.parse(lote[lote.length - 1].timestamp) : 0;
-      if (!depois || !lote.length || maisVelho < desdeMs) break;
+      if (!depois || !lote.length || maisVelho < desdeMs || !podeChamar()) break;
     }
     return { ...info, midias };
   }
@@ -79,8 +112,11 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
   }
 
   /**
-   * Roda o processo inteiro de uma trilha.
-   * @param {object} memoria  { perfis: { username: { seguidores, origem, descobertoEm } } } — persiste entre dias
+   * Roda o processo inteiro de uma trilha, em rodízio para caber no limite da Meta:
+   * a cada dia lê de verdade só os perfis há mais tempo sem leitura (maxPerfisPorDia) e,
+   * dos outros, usa os posts guardados na memória. O levantamento sempre cobre todos.
+   *
+   * @param {object} memoria  { perfis: { username: { seguidores, origem, lidoEm, midias[] } } } — persiste entre dias
    */
   async function minerar(trilha, { agoraData = new Date(), log = () => {}, memoria = { perfis: {} } } = {}) {
     const cfg = trilha.instagram || {};
@@ -88,31 +124,50 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
     const minSeg = cfg.minimoSeguidores ?? 50000;
     const rodadas = cfg.rodadasDeAmpliacao ?? 2;
     const maxNovos = cfg.maxNovosPorRodada ?? 10;
+    const maxLeituras = cfg.maxPerfisPorDia ?? 12;
     const norm = (u) => u.replace(/^@/, '').toLowerCase();
 
     const semente = (cfg.perfis || []).map(norm);
     for (const u of semente) memoria.perfis[u] ??= { origem: 'semente', descobertoEm: null, seguidores: null };
     const candidatos = [];
     const lidos = new Set();
+    const vistos = new Set();
+    const doCache = new Set();
     const descobertosHoje = [];
     // Perfis tirados pelo Telegram ("tira @x") ficam na memória com removido: true,
     // para não serem lidos nem voltarem quando forem citados de novo.
-    let fila = Object.keys(memoria.perfis).filter((u) => !memoria.perfis[u]?.removido);
+    // Ordem: quem nunca foi lido primeiro, depois quem está há mais tempo sem leitura.
+    const ordemDeLeitura = (us) => us
+      .filter((u) => !memoria.perfis[u]?.removido)
+      .sort((a, b) => String(memoria.perfis[a]?.lidoEm || '').localeCompare(String(memoria.perfis[b]?.lidoEm || '')));
+    let fila = ordemDeLeitura(Object.keys(memoria.perfis));
 
     for (let rodada = 0; rodada <= rodadas && fila.length; rodada++) {
       const citados = new Map();
       for (const username of fila) {
-        if (lidos.has(username)) continue;
-        lidos.add(username);
-        let p;
-        try {
-          p = await perfil(username, { desdeMs });
-        } catch (e) {
-          log(`  @${username}: ${e.message}`);
-          if (/limite de chamadas/.test(e.message)) return fim();
-          continue;
+        if (vistos.has(username)) continue;
+        vistos.add(username);
+        let p = null;
+        if (lidos.size < maxLeituras && podeChamar()) {
+          try {
+            p = await perfil(username, { desdeMs });
+            lidos.add(username);
+            memoria.perfis[username] = {
+              ...memoria.perfis[username],
+              seguidores: p.followers_count ?? null,
+              lidoEm: agoraData.toISOString(),
+              midias: p.midias.filter((m) => Date.parse(m.timestamp) >= desdeMs).map(enxugarMidia),
+            };
+          } catch (e) {
+            log(`  @${username}: ${e.message}`);
+          }
         }
-        memoria.perfis[username] = { ...memoria.perfis[username], seguidores: p.followers_count ?? null, lidoEm: agoraData.toISOString() };
+        if (!p) {
+          const guardado = memoria.perfis[username];
+          if (!guardado?.midias?.length) continue; // nunca lido: fica para a próxima rodada
+          p = { username, followers_count: guardado.seguidores, midias: guardado.midias };
+          doCache.add(username);
+        }
         const todos = p.midias.map((m) => normalizarMidia(m, p));
         for (const m of todos) {
           if (Date.parse(m.publicadoEm) < desdeMs) continue;
@@ -128,16 +183,18 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
           });
         }
       }
-      if (rodada === rodadas) break;
-      // Ampliação: os @ mais citados, só se forem perfis grandes.
+      if (rodada === rodadas || !podeChamar()) break;
+      // Ampliação: os @ mais citados, só se forem perfis grandes. Os que não couberem
+      // no limite de hoje ficam na memória e são lidos primeiro na próxima rodada.
       fila = [];
       const ordem = [...citados.entries()].sort((a, b) => b[1] - a[1]).map(([h]) => h);
       for (const h of ordem) {
-        if (fila.length >= maxNovos) break;
+        if (fila.length >= maxNovos || !podeChamar()) break;
         let seg = null;
         try {
           seg = await seguidores(h);
-        } catch {
+        } catch (e) {
+          if (/limite da Meta/.test(e.message)) break;
           continue; // conta pessoal, inexistente ou privada
         }
         if (seg !== null && seg >= minSeg) {
@@ -149,6 +206,7 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
     }
 
     for (const tag of cfg.hashtags || []) {
+      if (!podeChamar()) break;
       try {
         for (const m of await hashtag(tag)) {
           if (Date.parse(m.timestamp) < desdeMs) continue;
@@ -159,14 +217,35 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch })
         break;
       }
     }
-    return fim();
-
-    function fim() {
-      return { candidatos, descobertosHoje, perfisLidos: lidos.size, chamadas };
-    }
+    const faltam = ordemDeLeitura(Object.keys(memoria.perfis)).filter((u) => !vistos.has(u) || (!lidos.has(u) && !doCache.has(u)));
+    return {
+      candidatos,
+      descobertosHoje,
+      perfisLidos: lidos.size,
+      perfisDoCache: doCache.size,
+      perfisSemDados: faltam.length,
+      chamadas,
+      usoMeta: usoMaximo,
+      freado: freado || usoMaximo >= limiteUso,
+    };
   }
 
-  return { perfil, seguidores, hashtag, minerar, chamadas: () => chamadas };
+  return { perfil, seguidores, hashtag, minerar, chamadas: () => chamadas, uso: () => usoMaximo };
+}
+
+/** O que vale guardar de cada post entre um dia e outro (o media_url expira; a legenda vai cortada). */
+export function enxugarMidia(m) {
+  return {
+    id: m.id,
+    caption: (m.caption || '').slice(0, 1500),
+    comments_count: m.comments_count ?? 0,
+    like_count: m.like_count ?? null,
+    view_count: m.view_count ?? null,
+    media_type: m.media_type,
+    media_product_type: m.media_product_type,
+    permalink: m.permalink,
+    timestamp: m.timestamp,
+  };
 }
 
 /** @menções numa legenda, sem e-mails. */
