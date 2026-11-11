@@ -64,7 +64,7 @@ export function msgMapeamento({ trilha, data, perfisLidos, descobertos = [], lis
 
 export function msgPautas({ trilha, data, pautas, comRoteiroHoje = new Set() }) {
   if (!pautas.length) return [`📝 <b>Pautas · ${esc(data)}</b>\n\nNenhuma pauta nova hoje.`];
-  const blocos = [`📝 <b>Pautas · ${esc(trilha.nome)} · ${esc(data)}</b>\n<i>✍️ = roteiro já escrito hoje (vai no tópico Roteiro)</i>`];
+  const blocos = [`📝 <b>Pautas · ${esc(trilha.nome)} · ${esc(data)}</b>${comRoteiroHoje.size ? '\n<i>✍️ = roteiro já escrito hoje (vai no tópico Roteiro)</i>' : ''}`];
   for (const p of pautas) {
     const c = p.candidato;
     const k = p.classe || {};
@@ -77,7 +77,7 @@ export function msgPautas({ trilha, data, pautas, comRoteiroHoje = new Set() }) 
       k.adaptacao ? `↳ <i>${esc(k.adaptacao)}</i>` : '',
     ].filter(Boolean).join('\n'));
   }
-  blocos.push('<i>Para escrever outro: responda "roteiro 4" (o número da pauta).</i>');
+  blocos.push('<b>Escolha as pautas:</b> responda <code>roteiro 4</code> ou <code>roteiro 2, 5, 7</code>. O roteiro e a ficha de edição chegam nos tópicos Roteiro e Edição em alguns minutos por pauta.');
   return blocos;
 }
 

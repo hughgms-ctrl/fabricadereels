@@ -46,7 +46,8 @@
         "transcreverTop": 0,
         "hashtags": [],
         "nota": "Coloque aqui 10 a 15 @ de advogados previdenciaristas grandes (conta profissional). O resto a fábrica descobre sozinha pelos @ citados nas legendas. Corte de comentários menor que o gringo porque o nicho BR é menor: ajuste depois do primeiro levantamento."
-      }
+      },
+      "roteirosAutomaticos": false
     },
     {
       "id": "ia-advogados",
@@ -119,7 +120,8 @@
         "transcreverTop": 0,
         "hashtags": [],
         "nota": "Os 24 perfis gringos de IA do levantamento de 11/11/2026. Ficaram de fora os de fala em hindi (trakin.ai, techno_vichar, rajenlabs, ashishbuilds)."
-      }
+      },
+      "roteirosAutomaticos": false
     }
   ]
 }

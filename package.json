@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dia": "node bin/rodar-dia.mjs",
-    "simular": "node bin/rodar-dia.mjs --simular",
+    "simular": "node bin/rodar-dia.mjs --simular --com-roteiro",
     "test": "node --test-reporter=tap test/todos.mjs"
   }
 }

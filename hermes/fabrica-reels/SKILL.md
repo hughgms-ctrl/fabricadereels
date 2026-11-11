@@ -5,7 +5,8 @@ description: Opera a Fábrica de Reels nos grupos de reels do Hugo no Telegram (
 
 # Fábrica de Reels
 
-A fábrica fica em `~/fabricadereels` (Termux) e roda sozinha às 06:17. Ela **envia** as
+A fábrica fica em `~/fabricadereels` (Termux). Às 06:17 ela faz sozinha só o **Mapeamento** e
+as **Pautas**; os roteiros saem quando o Hugo escolhe. Ela **envia** as
 mensagens de cada etapa para os tópicos; **você (Hermes) recebe as respostas do Hugo e
 chama os comandos abaixo**. A fábrica nunca lê o Telegram: só você lê.
 
@@ -54,17 +55,23 @@ Seu papel: cuidar da **lista de perfis** e responder dúvidas sobre o mapeamento
 | "deu certo hoje?", "log" | `tail -n 40 logs/$(date +%F).log` |
 
 ### Pautas
-O que chega sozinho: lista numerada das pautas do dia (✍️ = já virou roteiro).
-Seu papel: transformar a escolha do Hugo em roteiro.
+O que chega sozinho às 06:17: lista numerada das pautas do dia (tema, números, link e a ideia
+para o público da trilha). **Nenhum roteiro é escrito sem a escolha do Hugo.**
+Seu papel: transformar a escolha em roteiro.
 
 | Hugo escreve | Você roda |
 |---|---|
-| "roteiro 4", "quero a 4", "faz a 4 e a 7" | `node bin/roteiro.mjs --trilha <trilha> --pauta 4` (um comando por número, um depois do outro) |
+| "roteiro 4", "quero a 4" | `node bin/roteiro.mjs --trilha <trilha> --pauta 4` |
+| "roteiro 2, 5 e 7", "faz a 2 a 5 e a 7" | `node bin/roteiro.mjs --trilha <trilha> --pauta 2,5,7` (um comando só, em segundo plano) |
+
+Para várias pautas, rode em segundo plano para não travar a conversa:
+`nohup node bin/roteiro.mjs --trilha <trilha> --pauta 2,5,7 > logs/roteiro.log 2>&1 &`
+e avise: "escrevendo 3 roteiros, chegam no tópico Roteiro em alguns minutos cada".
 
 Se a pauta já virou roteiro, o comando avisa qual palavra: repasse ao Hugo.
 
 ### Roteiro
-O que chega sozinho: roteiro completo (Frame 0, fala, cartelas, pontos a validar, material, DM).
+O que chega (depois de uma escolha nas Pautas): roteiro completo (tema do original, Frame 0, fala, cartelas, pontos a validar, material, DM).
 Seu papel: **ajustar** o texto quando o Hugo pedir. Você não reescreve o roteiro por conta
 própria: quem escreve é o comando.
 
@@ -77,7 +84,7 @@ Se o Hugo disser "aprovado", "tá bom" ou "pode" sem "publica PALAVRA", **não p
 responda "Quer que eu publique o material PALAVRA no site? Escreva: publica PALAVRA".
 
 ### Edição
-O que chega sozinho: folha de planos (imagem), link da referência, ritmo e o pedido de edição.
+O que chega (junto com cada roteiro): tema, folha de planos (imagem), link da referência, a fala e as cartelas a gravar, ritmo e o pedido de edição.
 Seu papel: tirar dúvidas sobre a referência e o pedido de edição. Se o Hugo mandar o vídeo
 bruto aqui, responda que a edição automática ainda não está ligada e que ele pode usar o
 "Pedido para o Claude editar igual" da mensagem da fábrica.

@@ -16,7 +16,8 @@
  *  Tudo vai para data/dias/AAAA-MM-DD/<trilha>.md e, se o Telegram estiver ligado
  *  (13-telegram.bat), para os tópicos do grupo da trilha.
  *
- * Uso:  node bin/rodar-dia.mjs [--trilha id] [--simular] [--sem-roteiro] [--sem-ficha] [--sem-telegram]
+ * Uso:  node bin/rodar-dia.mjs [--trilha id] [--simular] [--com-roteiro] [--sem-roteiro] [--sem-ficha] [--sem-telegram]
+ *       Sem --com-roteiro, para no tópico Pautas e espera o Hugo escolher ("roteiro 4").
  */
 import path from 'node:path';
 import { RAIZ, carregarEnv, lerJson, gravarJson, hojeSP, log } from '../src/util.mjs';
@@ -34,6 +35,7 @@ const opc = {
   simular: args.includes('--simular'),
   semRoteiro: args.includes('--sem-roteiro'),
   semFicha: args.includes('--sem-ficha'),
+  comRoteiro: args.includes('--com-roteiro'),
   semTelegram: args.includes('--sem-telegram') || args.includes('--simular'),
   trilha: args.includes('--trilha') ? args[args.indexOf('--trilha') + 1] : null,
 };
@@ -134,7 +136,11 @@ async function main() {
       }
       return out;
     };
-    const escolhidos = opc.semRoteiro ? [] : [
+    // Por padrão o roteiro só sai quando o Hugo escolhe a pauta no Telegram ("roteiro 4").
+    // Com "roteirosAutomaticos": true na trilha (ou --com-roteiro), a rodada já escreve
+    // os melhores, um por assunto.
+    const automatico = opc.comRoteiro || trilha.roteirosAutomaticos === true;
+    const escolhidos = opc.semRoteiro || !automatico ? [] : [
       ...variar(poolIG, trilha.roteiros?.instagram ?? 2),
       ...variar(poolYT, trilha.roteiros?.youtube ?? 1),
     ];

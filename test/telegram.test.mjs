@@ -177,3 +177,12 @@ test('instagram: a leitura para antes e sobra limite para descobrir perfis novos
   assert.equal(r.perfisLidos, 1); // "a" (2 páginas) levou o uso a 60%; ler "b" passaria dos 65%
   assert.deepEqual(r.descobertosHoje.map((d) => d.username), ['parceiro_grande']); // a reserva pagou a descoberta
 });
+
+test('roteiro: lê "4", "2,5,7" e "2, 5 e 7"', async () => {
+  const { lerNumeros } = await import('../bin/roteiro.mjs');
+  assert.deepEqual(lerNumeros('4'), [4]);
+  assert.deepEqual(lerNumeros('2,5,7'), [2, 5, 7]);
+  assert.deepEqual(lerNumeros('2, 5 e 7'), [2, 5, 7]);
+  assert.deepEqual(lerNumeros('5 5'), [5]);
+  assert.deepEqual(lerNumeros(''), []);
+});
