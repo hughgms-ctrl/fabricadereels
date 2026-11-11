@@ -2,7 +2,7 @@ import { outlier } from './outlier.mjs';
 import { mediana } from './util.mjs';
 
 /** Versão fixa da Graph API. Nunca "latest": mudança de versão é decisão consciente. */
-export const GRAPH_VERSAO = 'v21.0';
+export const GRAPH_VERSAO = 'v27.0';
 const BASE = `https://graph.facebook.com/${GRAPH_VERSAO}`;
 const LIMITE_POR_RODADA = 180; // a Meta permite ~200 chamadas por hora por usuário
 
