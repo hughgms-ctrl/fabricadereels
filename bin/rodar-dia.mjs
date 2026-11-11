@@ -17,6 +17,7 @@
  *
  * Uso:  node bin/rodar-dia.mjs [--trilha id] [--simular] [--sem-roteiro] [--sem-ficha]
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { RAIZ, carregarEnv, lerJson, gravarJson, hojeSP, log } from '../src/util.mjs';
 import { criarYoutube } from '../src/youtube.mjs';
@@ -153,7 +154,7 @@ async function main() {
             const dir = path.join(dirRefs, c.id.replace(/[^a-z0-9]+/gi, '-'));
             if (!baixados.has(c.id)) await baixar(c);
             const ficha = await montarFicha(c, dir, { env, run: deps.run, fetch: deps.fetchVideo, legendaBruta: c.legendaBruta, roteiro });
-            item.fichaMd = ficha.markdown.replace(/`(capa\.jpg|planos\.jpg|referencia\.mp4)`/g, (_, a) => `\`${path.relative(base, path.join(dir, a))}\``);
+            item.fichaMd = ficha.markdown.replace(/`(capa\.jpg|planos\.jpg)`/g, (_, a) => `\`${path.relative(base, path.join(dir, a))}\``);
             item.ficha = { info: ficha.info, cortes: ficha.cortes, ritmo: ficha.ritmo };
           } catch (e) {
             item.fichaMd = `> Ficha de edição indisponível: ${e.message}. Abra a referência: ${c.url}\n`;
@@ -181,6 +182,10 @@ async function main() {
           linhaMetrica: 'Ordenado por outlier (views ÷ mediana dos Shorts recentes do canal).',
         })
       : '';
+    // Vídeos baixados só para transcrever (sem ficha) também saem: no relatório fica o link.
+    if (env.MANTER_VIDEO !== '1') {
+      for (const v of baixados.values()) fs.rmSync(v, { force: true });
+    }
     const md = salvarRelatorio(base, trilha.id, relatorioDoDia({
       data, trilha, tabelaIG, tabelaYT, roteiros, transcricoes, descobertos, avisos, cota: yt?.cota(), chamadasIG,
     }), { data, trilha: trilha.id, itens: roteiros });

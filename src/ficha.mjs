@@ -137,14 +137,14 @@ export function fichaEmMarkdown({ candidato: c, info, cortes, ritmo, trechos, ro
     `- **Formato:** ${info.largura}×${info.altura} · ${info.fps} fps · ${s(info.segundos)}`,
     `- **Ritmo:** ${ritmo.planos} planos · ${ritmo.cortesPorSegundo} cortes/s · plano médio ${ritmo.planoMedio}s · gancho até ${s(ritmo.gancho)}`,
     `- **Cortes em:** ${cortes.map(s).join(' · ') || 'sem cortes (plano único)'}`,
-    `- **Arquivos:** \`${arquivos.capa}\` (capa) · \`${arquivos.folha}\` (um quadro por plano) · \`${arquivos.video}\``,
+    `- **Imagens:** \`${arquivos.capa}\` (capa) · \`${arquivos.folha}\` (um quadro por plano)`,
     '',
   ];
   if (trechos?.length) {
     linhas.push('**Fala com tempos:**', '', ...trechos.map((t) => `- \`${s(t.ini)}–${s(t.fim)}\` ${t.texto}`), '');
   }
   linhas.push(
-    '**Pedido para o Claude editar igual** (cole junto com o seu vídeo bruto, a capa e a folha de planos):',
+    '**Pedido para o Claude editar igual** (cole junto com o seu vídeo bruto e a folha de planos; a referência vai pelo link):',
     '',
     '```',
     pedidoDeEdicao({ c, info, cortes, ritmo, roteiro }),
@@ -179,7 +179,10 @@ export async function montarFicha(candidato, dir, { env, run = executar, fetch: 
   const { capa, folha } = await quadros(video, cortes, info.segundos, dir, { run });
   const trechos = legendaBruta ? trechosComTempo(legendaBruta) : [];
   const rel = (p) => path.basename(p);
-  const arquivos = { video: rel(video), capa: rel(capa), folha: rel(folha) };
+  const arquivos = { capa: rel(capa), folha: rel(folha) };
+  // O vídeo só serve para medir cortes e tirar os quadros: depois disso sai.
+  // No relatório fica o link da referência (MANTER_VIDEO=1 no .env guarda o arquivo).
+  if (env?.MANTER_VIDEO !== '1') fs.rmSync(video, { force: true });
   return {
     info, cortes, ritmo, trechos, arquivos,
     markdown: fichaEmMarkdown({ candidato, info, cortes, ritmo, trechos, roteiro, arquivos }),
