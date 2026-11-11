@@ -142,8 +142,13 @@ async function main() {
     // Transcrição: os escolhidos + o top 10 do Instagram (vai no relatório para leitura).
     const { baixar, limpar } = criarBaixador({ dirRefs, env, deps });
     const transcricoes = [];
-    const paraTranscrever = [...new Map([...escolhidos, ...poolIG.slice(0, trilha.instagram?.transcreverTop ?? 10)].map((c) => [c.id, c])).values()];
-    for (const c of paraTranscrever) {
+    // No celular o Whisper é lento: por padrão só os escolhidos para roteiro (transcreverTop
+    // na trilha acrescenta outros do topo do Instagram, só para leitura no relatório).
+    const paraTranscrever = [...new Map([...escolhidos, ...poolIG.slice(0, trilha.instagram?.transcreverTop ?? 0)].map((c) => [c.id, c])).values()];
+    for (const [i, c] of paraTranscrever.entries()) {
+      // Avisar o idioma poupa o Whisper de detectar sozinho (é a parte mais lenta no celular).
+      c.idioma ??= classes.get(c.id)?.idioma || trilha.idiomasAceitos?.[0] || null;
+      log(`  🎙️ transcrevendo ${i + 1}/${paraTranscrever.length}: ${c.canal}`);
       await garantirTranscricao(c, { env, raiz: RAIZ, deps, baixar, log });
       if (c.transcricao) transcricoes.push({ candidato: c, texto: c.transcricao, origem: c.origemTranscricao });
     }

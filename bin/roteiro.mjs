@@ -41,6 +41,8 @@ async function main() {
   const dirRefs = path.join(lidas.base, `${trilha.id}-referencias`);
   const { baixar, limpar } = criarBaixador({ dirRefs, env });
   log(`▶ ${trilha.nome} · pauta ${numero} · ${c.canal} · ${c.url}`);
+  c.idioma ??= pauta.classe?.idioma || trilha.idiomasAceitos?.[0] || null;
+  log('  🎙️ transcrevendo a referência (no celular pode levar alguns minutos)');
   await garantirTranscricao(c, { env, raiz: RAIZ, baixar, log });
   const item = await produzirRoteiro({
     trilha, c, classe: pauta.classe, env, chamar: chamarClaude, usados, dirRefs, base: lidas.base,

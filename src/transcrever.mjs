@@ -84,17 +84,26 @@ function pesoLegenda(nome) {
  * Whisper local (whisper.cpp) sobre um vídeo já baixado: converte para 16 kHz mono e
  * transcreve no próprio celular. Devolve o texto e a legenda SRT (com tempos, para a ficha).
  */
-export async function whisperArquivo(video, { bin, modelo, idioma = 'auto', run = executar }) {
+/** No celular o Whisper é o passo mais lento: limites para uma rodada não virar horas. */
+export const WHISPER_MAX_SEGUNDOS = 150; // Shorts e reels raramente passam de 2 min 30 s
+export const WHISPER_LIMITE_MS = 20 * 60 * 1000;
+
+export async function whisperArquivo(video, { bin, modelo, idioma = 'auto', run = executar, threads = Math.max(2, os.cpus().length || 4) }) {
   if (!fs.existsSync(modelo)) throw new Error(`Modelo do Whisper não encontrado em ${modelo}`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wh-'));
   try {
     const wav = path.join(dir, 'a16.wav');
     try {
-      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', video, '-vn', '-ar', '16000', '-ac', '1', wav]);
+      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', video, '-vn', '-t', String(WHISPER_MAX_SEGUNDOS), '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav]);
     } catch (e) {
       throw new Error(/does not contain any stream|no audio/i.test(e.message) ? 'vídeo sem áudio' : `ffmpeg: ${e.message.split('\n')[0]}`);
     }
-    await run(bin, ['-m', modelo, '-f', wav, '-l', idioma, '-otxt', '-osrt', '-of', path.join(dir, 'saida'), '-np']);
+    try {
+      await run(bin, ['-m', modelo, '-f', wav, '-l', idioma, '-t', String(threads), '-otxt', '-osrt', '-of', path.join(dir, 'saida'), '-np'], { timeout: WHISPER_LIMITE_MS });
+    } catch (e) {
+      if (e.killed || e.signal === 'SIGTERM') throw new Error(`passou de ${WHISPER_LIMITE_MS / 60000} min transcrevendo (celular ocupado ou vídeo longo)`);
+      throw e;
+    }
     const texto = fs.readFileSync(path.join(dir, 'saida.txt'), 'utf8').replace(/\s+/g, ' ').trim();
     const srt = path.join(dir, 'saida.srt');
     const bruta = fs.existsSync(srt) ? fs.readFileSync(srt, 'utf8') : null;
