@@ -1,61 +1,104 @@
 ---
 name: fabrica-reels
-description: Opera a Fábrica de Reels (pautas, roteiros, ajustes, publicação e perfis) a partir dos grupos "Advocacia" e "Hugo Especialista em IA" no Telegram. Use quando o Hugo pedir roteiro de uma pauta, ajuste de roteiro, publicação de material, ou mexer na lista de perfis, nesses dois grupos.
+description: Opera a Fábrica de Reels nos grupos de reels do Hugo no Telegram (advocacia/previdenciário e IA para advogados), com uma diretriz por tópico (Mapeamento, Pautas, Roteiro, Edição, Publicação, Métricas). Use quando o Hugo escrever num desses tópicos ou pedir pauta, roteiro, ajuste, publicação ou mudança de perfis.
 ---
 
 # Fábrica de Reels
 
 A fábrica fica em `~/fabricadereels` (Termux) e roda sozinha às 06:17. Ela **envia** as
-mensagens de cada etapa para os tópicos dos grupos; **você (Hermes) recebe as respostas do
-Hugo e chama os comandos abaixo**. A fábrica nunca lê o Telegram: só você lê.
+mensagens de cada etapa para os tópicos; **você (Hermes) recebe as respostas do Hugo e
+chama os comandos abaixo**. A fábrica nunca lê o Telegram: só você lê.
 
-## Onde vale
+## Qual grupo é qual trilha
 
-| Grupo | Trilha (`--trilha`) |
-|---|---|
-| **Advocacia** | `previdenciario` |
-| **Hugo Especialista em IA** | `ia-advogados` |
+Não dependa do nome do grupo (ele pode mudar). Rode uma vez por conversa:
+
+```bash
+cat ~/fabricadereels/data/telegram.json
+```
+
+Cada trilha tem o `chatId` do grupo dela e o `threadId` de cada tópico. Compare com o
+chat e o tópico da mensagem que chegou:
+
+| Trilha (`--trilha`) | Grupo (hoje) | Público dos reels |
+|---|---|---|
+| `previdenciario` | Reels Advocacia | idosos, PCD, autistas e famílias no INSS |
+| `ia-advogados` | Hugo Especialista em IA | advogados que usam IA |
 
 - No grupo **Pakki** e em conversas privadas: **não use esta skill**. A Pakki não muda.
-- Se não tiver certeza de qual grupo é qual, rode `cat ~/fabricadereels/data/telegram.json`
-  (cada trilha tem o `chatId` do grupo dela).
+- Se a mensagem não vier de nenhum `chatId` do arquivo, não rode comando da fábrica.
 
-## Etapas e tópicos
+## Regras gerais
 
-`Mapeamento → Pautas → Roteiro → Edição → Publicação → Métricas`
+- Rode sempre dentro de `~/fabricadereels`. Os comandos só leem e escrevem dentro dessa
+  pasta (e publicam o site pelo `git push` do próprio repositório da fábrica).
+- Comandos que chamam o Claude (roteiro, ajuste, mapeamento) levam de 1 a 5 minutos:
+  responda "escrevendo, chega no tópico Roteiro em alguns minutos" e rode.
+- A palavra-chave é sempre MAIÚSCULA e sem acento: "publica casa" → `CASA`.
+- Responda curto, no mesmo tópico: o que fez e a última linha do comando. As mensagens
+  completas a fábrica manda sozinha.
+- Erro: mande a mensagem do erro como veio. Não tente consertar arquivos da fábrica.
 
-- Mapeamento, Pautas, Roteiro e Edição chegam sozinhos às 06:17.
-- **Publicação só acontece quando o Hugo escreve "publica PALAVRA"**. Nunca publique por
-  conta própria, nem se ele disser "tá bom" ou "aprovado" sem a palavra. Na dúvida, pergunte:
-  "Quer que eu publique o material PALAVRA no site?"
+## Diretriz de cada tópico
 
-## O que o Hugo escreve → o que você roda
+### Mapeamento
+O que chega sozinho: resumo do dia (perfis lidos, perfis novos, quantos passaram do corte).
+Seu papel: cuidar da **lista de perfis** e responder dúvidas sobre o mapeamento.
 
-Rode sempre dentro de `~/fabricadereels`. Os comandos que chamam o Claude levam de 1 a 5
-minutos: avise "escrevendo, chega no tópico Roteiro em alguns minutos" e rode.
-
-| Hugo escreve (exemplos) | Comando |
+| Hugo escreve | Você roda |
 |---|---|
-| "roteiro 4", "faz a pauta 4" | `node bin/roteiro.mjs --trilha <trilha> --pauta 4` |
-| "ajusta CASA: encurta a fala", "CASA: troca o gancho por uma pergunta" | `node bin/ajustar.mjs CASA "encurta a fala"` |
-| "publica CASA" | `node bin/aprovar.mjs CASA --publicar` |
-| "o que falta aprovar?", "pendentes" | `node bin/aprovar.mjs --lista` |
 | "tira @fulano" | `node bin/perfis.mjs tirar <trilha> @fulano` |
 | "adiciona @ciclano" | `node bin/perfis.mjs adicionar <trilha> @ciclano` |
 | "quais perfis?" | `node bin/perfis.mjs listar <trilha>` |
-| "roda o mapeamento agora" | `nohup node bin/rodar-dia.mjs --trilha <trilha> > logs/manual.log 2>&1 &` (avise que leva de 10 a 30 min) |
+| "roda o mapeamento agora" | `nohup node bin/rodar-dia.mjs --trilha <trilha> > logs/manual.log 2>&1 &` (avise: 20 a 40 min) |
 | "deu certo hoje?", "log" | `tail -n 40 logs/$(date +%F).log` |
 
-- A palavra-chave é sempre uma palavra em MAIÚSCULAS sem acento (CASA, PRAZO, SIGILO).
-  Converta o que o Hugo escrever: "publica casa" → `CASA`.
-- Responda no mesmo tópico em que o Hugo escreveu, curto: o que fez e o resultado
-  (a última linha do comando). As mensagens completas a fábrica manda sozinha nos tópicos.
-- Se o comando der erro, mande a mensagem de erro como veio e não tente consertar arquivos
-  da fábrica por conta própria.
+### Pautas
+O que chega sozinho: lista numerada das pautas do dia (✍️ = já virou roteiro).
+Seu papel: transformar a escolha do Hugo em roteiro.
+
+| Hugo escreve | Você roda |
+|---|---|
+| "roteiro 4", "quero a 4", "faz a 4 e a 7" | `node bin/roteiro.mjs --trilha <trilha> --pauta 4` (um comando por número, um depois do outro) |
+
+Se a pauta já virou roteiro, o comando avisa qual palavra: repasse ao Hugo.
+
+### Roteiro
+O que chega sozinho: roteiro completo (Frame 0, fala, cartelas, pontos a validar, material, DM).
+Seu papel: **ajustar** o texto quando o Hugo pedir. Você não reescreve o roteiro por conta
+própria: quem escreve é o comando.
+
+| Hugo escreve | Você roda |
+|---|---|
+| "ajusta CASA: encurta a fala", "CASA: troca o gancho por uma pergunta" | `node bin/ajustar.mjs CASA "encurta a fala"` |
+| "o que falta aprovar?", "pendentes" | `node bin/aprovar.mjs --lista` |
+
+Se o Hugo disser "aprovado", "tá bom" ou "pode" sem "publica PALAVRA", **não publique**:
+responda "Quer que eu publique o material PALAVRA no site? Escreva: publica PALAVRA".
+
+### Edição
+O que chega sozinho: folha de planos (imagem), link da referência, ritmo e o pedido de edição.
+Seu papel: tirar dúvidas sobre a referência e o pedido de edição. Se o Hugo mandar o vídeo
+bruto aqui, responda que a edição automática ainda não está ligada e que ele pode usar o
+"Pedido para o Claude editar igual" da mensagem da fábrica.
+
+### Publicação
+Seu papel: **publicar só com a ordem explícita**.
+
+| Hugo escreve | Você roda |
+|---|---|
+| "publica CASA" | `node bin/aprovar.mjs CASA --publicar` |
+| "pendentes" | `node bin/aprovar.mjs --lista` |
+
+Depois de publicar, a fábrica manda o link do site neste tópico. Lembre o Hugo de cadastrar
+a palavra na automação de comentários como **correspondência exata**.
+
+### Métricas
+Ainda não há métricas automáticas. Se o Hugo perguntar, diga que essa etapa vem depois.
 
 ## Nunca
 
 - Publicar sem "publica PALAVRA".
 - Mostrar ou copiar o conteúdo do `.env` (chaves e tokens).
-- Editar arquivos em `config/`, `src/` ou `bin/` (vêm do GitHub e o Hugo atualiza pelo PC).
-- Rodar `git push`, `git reset` ou apagar pastas em `data/`.
+- Editar arquivos em `config/`, `src/` ou `bin/` (vêm do GitHub; o Hugo atualiza pelo PC).
+- Rodar `git reset`, apagar pastas em `data/` ou rodar comando da fábrica no grupo da Pakki.
