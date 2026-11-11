@@ -7,6 +7,6 @@ echo  Se pedir login, abra o link que aparecer no navegador do PC.
 echo  Quando estiver logado, digite /exit e Enter.
 echo ============================================================
 echo.
-%SSH% "cd ~ && claude"
+%SSH% "export PATH=$HOME/.local/bin:$PATH; cd ~ && claude"
 echo.
 pause

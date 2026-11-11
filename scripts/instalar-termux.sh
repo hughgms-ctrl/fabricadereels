@@ -34,10 +34,22 @@ echo "▶ yt-dlp num ambiente só da fábrica (.venv)"
 .venv/bin/pip install -q -U yt-dlp
 echo "  ✓ $(.venv/bin/yt-dlp --version)"
 
-if ! command -v claude >/dev/null 2>&1; then
-  echo "▶ Claude Code"
-  npm install -g @anthropic-ai/claude-code
-  echo "  Depois rode 'claude' uma vez e faça login com a sua conta."
+echo "▶ Claude Code"
+# O SSH com comando não lê o .bashrc, então ~/.local/bin (instalador nativo) fica fora do PATH: procura lá também.
+export PATH="$HOME/.local/bin:$PATH"
+CLAUDE="$(command -v claude || true)"
+if [[ -n "$CLAUDE" ]] && "$CLAUDE" --version >/dev/null 2>&1; then
+  echo "  ✓ $("$CLAUDE" --version) em $CLAUDE: não mexo"
+else
+  # O npm novo bloqueia o passo final da instalação do Claude Code; aqui ele é liberado só para esse pacote.
+  npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code \
+    || npm install -g @anthropic-ai/claude-code
+  CLAUDE="$(command -v claude || true)"
+  if [[ -n "$CLAUDE" ]] && "$CLAUDE" --version >/dev/null 2>&1; then
+    echo "  ✓ $("$CLAUDE" --version) em $CLAUDE"
+  else
+    echo "  ! O Claude Code não abriu. Rode o 12-terminal.bat e mande o resultado de: claude --version"
+  fi
 fi
 
 if [[ "${1:-}" == "--whisper" ]]; then
@@ -66,6 +78,10 @@ fi
 if [[ -x "$PASTA/.whisper.cpp/build/bin/whisper-cli" ]]; then
   sed -i "s#^WHISPER_CPP_BIN=.*#WHISPER_CPP_BIN=$PASTA/.whisper.cpp/build/bin/whisper-cli#" .env
 fi
+if [[ -n "${CLAUDE:-}" ]]; then
+  # Caminho completo: o cron e o SSH não enxergam o mesmo PATH do terminal.
+  sed -i "s#^CLAUDE_BIN=.*#CLAUDE_BIN=$CLAUDE#" .env
+fi
 chmod +x scripts/*.sh bin/*.mjs
 mkdir -p logs data
 
@@ -77,11 +93,16 @@ rodando() { # sem depender do pgrep, que nem todo Termux tem
 if rodando crond; then
   echo "  ✓ crond já está rodando: não ligo outro (senão as tarefas rodariam duas vezes)"
 else
-  sv-enable crond 2>/dev/null || echo "  Feche e abra o Termux uma vez e rode de novo para ligar o crond."
+  # Liga junto com o Termux daqui pra frente e, se ainda não subiu, liga agora.
+  sv-enable crond >/dev/null 2>&1 || true
+  sleep 2
+  if ! rodando crond; then crond 2>/dev/null || true; fi
+  if rodando crond; then echo "  ✓ crond ligado"; else echo "  ! crond não ligou: feche e abra o Termux e rode o 2-instalar.bat de novo"; fi
 fi
 LINHA="17 6 * * * $PASTA/scripts/cron.sh"
-# Só a linha da fábrica é trocada; as linhas dos outros projetos ficam como estão.
-( crontab -l 2>/dev/null | grep -vF "$PASTA/scripts/cron.sh" ; echo "$LINHA" ) | crontab -
+# Lê o crontab atual (pode estar vazio) e troca só a linha da fábrica; as dos outros projetos ficam.
+ATUAL="$(crontab -l 2>/dev/null || true)"
+{ printf '%s\n' "$ATUAL" | grep -vF "$PASTA/scripts/cron.sh" | grep -v '^$' || true; echo "$LINHA"; } | crontab -
 echo "  Agendado: todo dia às 06:17 (horário do celular). Seu crontab agora:"
 crontab -l | sed 's/^/    /'
 
