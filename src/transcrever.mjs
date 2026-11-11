@@ -51,8 +51,9 @@ export async function legendaYoutube(url, { idiomas = 'pt.*,pt,en.*,en', run = e
     if (!arquivos.length) return null;
     // Prefere a legenda manual (sem "orig"/auto) e português.
     arquivos.sort((a, b) => pesoLegenda(a) - pesoLegenda(b));
-    const texto = vttParaTexto(fs.readFileSync(path.join(dir, arquivos[0]), 'utf8'));
-    return texto ? { texto, origem: `legenda ${arquivos[0].split('.').slice(1, -1).join('.')}` } : null;
+    const bruta = fs.readFileSync(path.join(dir, arquivos[0]), 'utf8');
+    const texto = vttParaTexto(bruta);
+    return texto ? { texto, bruta, origem: `legenda ${arquivos[0].split('.').slice(1, -1).join('.')}` } : null;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -66,27 +67,34 @@ function pesoLegenda(nome) {
 }
 
 /**
- * Whisper local (whisper.cpp) a partir de uma URL de vídeo: baixa o áudio, converte
- * para 16 kHz mono e transcreve no próprio celular.
+ * Whisper local (whisper.cpp) sobre um vídeo já baixado: converte para 16 kHz mono e
+ * transcreve no próprio celular. Devolve o texto e a legenda SRT (com tempos, para a ficha).
  */
-export async function whisperLocal(url, { bin, modelo, idioma = 'auto', run = executar }) {
+export async function whisperArquivo(video, { bin, modelo, idioma = 'auto', run = executar }) {
   if (!fs.existsSync(modelo)) throw new Error(`Modelo do Whisper não encontrado em ${modelo}`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wh-'));
   try {
-    await run('yt-dlp', ['-f', 'bestaudio/best', '-o', path.join(dir, 'a.%(ext)s'), url]);
-    const audio = fs.readdirSync(dir).find((a) => a.startsWith('a.'));
-    if (!audio) throw new Error('não consegui baixar o áudio');
     const wav = path.join(dir, 'a16.wav');
-    await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', path.join(dir, audio), '-ar', '16000', '-ac', '1', wav]);
-    await run(bin, ['-m', modelo, '-f', wav, '-l', idioma, '-otxt', '-of', path.join(dir, 'saida'), '-np']);
+    try {
+      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', video, '-vn', '-ar', '16000', '-ac', '1', wav]);
+    } catch (e) {
+      throw new Error(/does not contain any stream|no audio/i.test(e.message) ? 'vídeo sem áudio' : `ffmpeg: ${e.message.split('\n')[0]}`);
+    }
+    await run(bin, ['-m', modelo, '-f', wav, '-l', idioma, '-otxt', '-osrt', '-of', path.join(dir, 'saida'), '-np']);
     const texto = fs.readFileSync(path.join(dir, 'saida.txt'), 'utf8').replace(/\s+/g, ' ').trim();
-    return texto ? { texto, origem: 'whisper local' } : null;
+    const srt = path.join(dir, 'saida.srt');
+    const bruta = fs.existsSync(srt) ? fs.readFileSync(srt, 'utf8') : null;
+    return texto ? { texto, bruta, origem: 'whisper local' } : null;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
-/** Escolhe o caminho mais barato que funcionar para cada fonte. */
+/**
+ * Escolhe o caminho mais barato que funcionar:
+ *  - YouTube: legenda pelo yt-dlp (não baixa o vídeo);
+ *  - resto: baixa o vídeo (deps.baixar) e roda o Whisper no celular.
+ */
 export async function transcrever(candidato, env, deps = {}) {
   const run = deps.run || executar;
   if (candidato.fonte === 'youtube') {
@@ -94,10 +102,12 @@ export async function transcrever(candidato, env, deps = {}) {
     if (leg) return leg;
   }
   if (candidato.fonte === 'instagram' && !candidato.ehVideo) return null;
-  if ((env.TRANSCRICAO_REELS || 'whisper') !== 'whisper') return null;
-  return whisperLocal(candidato.midiaUrl || candidato.url, {
+  if ((env.TRANSCRICAO_REELS || 'whisper') !== 'whisper' || !deps.baixar) return null;
+  const video = await deps.baixar(candidato);
+  return whisperArquivo(video, {
     bin: env.WHISPER_CPP_BIN || 'whisper-cli',
     modelo: path.resolve(deps.raiz || '.', env.WHISPER_MODELO || 'modelos/ggml-base.bin'),
+    idioma: candidato.idioma?.slice(0, 2) || 'auto',
     run,
   });
 }

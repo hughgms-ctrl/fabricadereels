@@ -7,11 +7,15 @@
       "publico": "idosos 65+, pessoas com deficiência, autistas e quem cuida deles; famílias de baixa renda que lidam com o INSS",
       "quemPublica": "advogado previdenciarista brasileiro",
       "objetivo": "Mostrar uma dor ou corrigir uma crença sobre o benefício, sem vender. A pessoa comenta a palavra e recebe um material prático (checklist em passos).",
-      "porDia": 3,
+      "idiomasAceitos": ["pt"],
+      "roteiros": { "instagram": 2, "youtube": 2 },
       "youtube": {
+        "criterio": "outlier",
         "regionCode": "BR",
         "relevanceLanguage": "pt",
         "janelaDias": [3, 60],
+        "minimoOutlier": 5,
+        "minimoViews": 20000,
         "buscas": [
           "BPC LOAS",
           "benefício de prestação continuada",
@@ -24,11 +28,17 @@
         ]
       },
       "instagram": {
+        "criterio": "comentarios",
         "perfis": [],
-        "nota": "Adicione aqui @ de advogados previdenciaristas brasileiros com conta profissional. Só entram perfis que você conferiu."
-      },
-      "minimoOutlier": 5,
-      "minimoViews": 20000
+        "janelaDias": 90,
+        "minimoComentarios": 1000,
+        "minimoSeguidores": 50000,
+        "rodadasDeAmpliacao": 2,
+        "maxNovosPorRodada": 10,
+        "transcreverTop": 10,
+        "hashtags": [],
+        "nota": "Coloque aqui 10 a 15 @ de advogados previdenciaristas grandes (conta profissional). O resto a fábrica descobre sozinha pelos @ citados nas legendas. Corte de comentários menor que o gringo porque o nicho BR é menor: ajuste depois do primeiro levantamento."
+      }
     },
     {
       "id": "ia-advogados",
@@ -37,11 +47,15 @@
       "publico": "advogados e escritórios brasileiros que querem usar IA (Claude, ChatGPT) no dia a dia",
       "quemPublica": "especialista em IA para advocacia (Pakki)",
       "objetivo": "Adaptar o viral gringo de IA para a rotina do escritório. A pessoa comenta a palavra e recebe o prompt, o passo a passo ou o checklist prometido.",
-      "porDia": 3,
+      "idiomasAceitos": ["en", "pt", "es"],
+      "roteiros": { "instagram": 3, "youtube": 1 },
       "youtube": {
+        "criterio": "outlier",
         "regionCode": "US",
         "relevanceLanguage": "en",
         "janelaDias": [3, 45],
+        "minimoOutlier": 3,
+        "minimoViews": 50000,
         "buscas": [
           "Claude AI tips",
           "ChatGPT prompts",
@@ -52,6 +66,7 @@
         ]
       },
       "instagram": {
+        "criterio": "comentarios",
         "perfis": [
           "mavgpt", "sabrina_ramonov", "nick_saraev", "cindiezhu", "raycfu",
           "taki.gpt", "imjonathanacuna", "nocode.joshua", "limor_markman",
@@ -60,10 +75,15 @@
           "fabionkallaku", "samdespomarketing", "adamerhart", "alassafi.ai",
           "itsellagonzales", "realmelaninking", "maxjohnscn", "valeridoesai"
         ],
-        "nota": "Perfis gringos de IA levantados em 11/11/2026 (posts com 10 mil+ comentários)."
-      },
-      "minimoOutlier": 3,
-      "minimoViews": 50000
+        "janelaDias": 90,
+        "minimoComentarios": 10000,
+        "minimoSeguidores": 50000,
+        "rodadasDeAmpliacao": 2,
+        "maxNovosPorRodada": 10,
+        "transcreverTop": 10,
+        "hashtags": [],
+        "nota": "Os 24 perfis gringos de IA do levantamento de 11/11/2026. Ficaram de fora os de fala em hindi (trakin.ai, techno_vichar, rajenlabs, ashishbuilds)."
+      }
     }
   ]
 }

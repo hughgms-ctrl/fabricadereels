@@ -5,9 +5,25 @@ import { outlier, ranquear, escolherVariados } from '../src/outlier.mjs';
 import { vttParaTexto, legendaYoutube } from '../src/transcrever.mjs';
 import { extrairJson, validarRoteiro, montarPedido } from '../src/prompts.mjs';
 import { criarYoutube } from '../src/youtube.mjs';
-import { criarInstagram, GRAPH_VERSAO } from '../src/instagram.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { criarInstagram, GRAPH_VERSAO, selecionarPorComentarios, arrobas } from '../src/instagram.mjs';
 import { escreverRoteiro } from '../src/roteiro.mjs';
-import { criarFetchSimulado, chamarSimulado, runSimulado, VTT_EXEMPLO } from './simulacao.mjs';
+import { lerTemposDeCorte, trechosComTempo, resumoRitmo, pedidoDeEdicao, montarFicha } from '../src/ficha.mjs';
+import { classificar, tabelaLevantamento } from '../src/levantamento.mjs';
+import { materialEmHtml, slug, gerarSites } from '../src/sites.mjs';
+import { criarFetchSimulado, chamarSimulado, runSimulado, fetchVideoSimulado, VTT_EXEMPLO } from './simulacao.mjs';
+
+function temFfmpeg() {
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 test('mediana e outlier', () => {
   assert.equal(mediana([3, 1, 2]), 2);
@@ -78,19 +94,110 @@ test('YouTube sem chave avisa claramente', () => {
   assert.throws(() => criarYoutube({ chave: '' }), /YOUTUBE_API_KEY/);
 });
 
-test('Instagram: Business Discovery com versão fixa, outlier por comentários e janela de datas', async () => {
+test('Instagram: processo do levantamento (90 dias paginados + ampliação por @ citados com 50 mil+)', async () => {
   const urls = [];
   const f = criarFetchSimulado();
-  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: (u) => (urls.push(String(u)), f(u)) });
-  const c = await ig.minerar({ instagram: { perfis: ['mavgpt'] }, youtube: { janelaDias: [3, 10] } });
-  assert.ok(urls[0].includes(`/${GRAPH_VERSAO}/`));
-  assert.ok(!urls[0].includes('latest'));
-  // janela 3–10 dias: só os posts de 5 a 10 dias entram (i = 0..5)
-  assert.equal(c.length, 6);
-  const top = c.sort((a, b) => b.outlier - a.outlier)[0];
-  assert.equal(top.comentarios, 40000);
-  assert.equal(top.canal, '@mavgpt');
-  assert.ok(top.ehVideo);
+  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: (u) => (urls.push(decodeURIComponent(String(u))), f(u)) });
+  const memoria = { perfis: {} };
+  const r = await ig.minerar(
+    { instagram: { perfis: ['@MavGPT'], janelaDias: 90, minimoSeguidores: 50000, rodadasDeAmpliacao: 2 } },
+    { memoria },
+  );
+  assert.ok(urls.every((u) => u.includes(`/${GRAPH_VERSAO}/`) && !u.includes('latest')));
+  // 60 posts, 1 a cada 1,5 dia a partir de 2 dias: 59 dentro de 90 dias; precisou da 2ª página.
+  assert.ok(urls.some((u) => u.includes('.after(50)')));
+  // @parceiro_grande (300 mil) entrou; @parceiro_pequeno (2 mil) não.
+  assert.deepEqual(r.descobertosHoje.map((d) => d.username), ['parceiro_grande']);
+  assert.ok(memoria.perfis.parceiro_grande);
+  assert.ok(!memoria.perfis.parceiro_pequeno);
+  assert.equal(r.candidatos.length, 59 * 2);
+  assert.equal(r.chamadas, 2 + 1 + 2 + 1);
+});
+
+test('Instagram: comentário é a métrica principal (corte absoluto, maior pro menor)', async () => {
+  const ig = criarInstagram({ igUserId: '1', token: 't', fetch: criarFetchSimulado() });
+  const r = await ig.minerar({ instagram: { perfis: ['a', 'b'], rodadasDeAmpliacao: 0 } }, { memoria: { perfis: {} } });
+  const lista = selecionarPorComentarios(r.candidatos, { minimoComentarios: 10000 });
+  assert.deepEqual(lista.map((c) => c.comentarios), [40000, 40000, 12000, 12000]);
+  assert.ok(lista[0].outlier > 50); // outlier vai junto, como informação
+  const semUsados = selecionarPorComentarios(r.candidatos, { minimoComentarios: 10000, jaUsados: new Set([lista[0].id]) });
+  assert.equal(semUsados.length, 3);
+  assert.equal(selecionarPorComentarios(r.candidatos, { minimoComentarios: 10000, soVideo: true }).length, 2);
+});
+
+test('@ citados ignoram e-mail e pontuação no fim', () => {
+  assert.deepEqual(arrobas('fale com a@b.com e @Joao.Silva. Parceria com @marca_x!'), ['joao.silva', 'marca_x']);
+});
+
+test('ficha: cortes, fala com tempos, ritmo e pedido de edição', () => {
+  assert.deepEqual(lerTemposDeCorte('frame:0 pts:60 pts_time:2\nlavfi.scene_score=0.9\nframe:1 pts:135 pts_time:4.5333\n'), [2, 4.53]);
+  const srt = trechosComTempo('1\n00:00:00,000 --> 00:00:02,500\nPrimeira frase.\n\n2\n00:00:02,500 --> 00:00:05,000\nSegunda.\n');
+  assert.deepEqual(srt, [{ ini: 0, fim: 2.5, texto: 'Primeira frase.' }, { ini: 2.5, fim: 5, texto: 'Segunda.' }]);
+  const vtt = trechosComTempo(VTT_EXEMPLO);
+  assert.equal(vtt[0].texto, 'Sim. Se o seu marido é aposentado');
+  assert.equal(vtt.length, 2);
+  const ritmo = resumoRitmo({ segundos: 6.5, cortes: [2, 4.5] });
+  assert.deepEqual(ritmo, { planos: 3, cortesPorSegundo: 0.31, planoMedio: 2.2, gancho: 2 });
+  const pedido = pedidoDeEdicao({
+    c: { url: 'https://ref' }, info: { largura: 1080, altura: 1920, segundos: 6.5 }, cortes: [2, 4.5], ritmo,
+    roteiro: { frame0: 'PODE?', texto_tela: ['SIM'], palavra_chave: 'CASA' },
+  });
+  assert.match(pedido, /https:\/\/ref/);
+  assert.match(pedido, /primeiro corte em 2\.0s/);
+  assert.match(pedido, /COMENTA CASA/);
+});
+
+test('ficha de ponta a ponta com ffmpeg de verdade', { skip: !temFfmpeg() }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ficha-teste-'));
+  const r = await montarFicha({ fonte: 'instagram', url: 'https://ref', midiaUrl: 'https://video', canal: '@x', comentarios: 12000 }, dir, {
+    env: {}, run: runSimulado, fetch: fetchVideoSimulado, legendaBruta: VTT_EXEMPLO, roteiro: { palavra_chave: 'CASA' },
+  });
+  assert.deepEqual(r.cortes, [2, 4.53]);
+  assert.equal(r.info.largura, 360);
+  assert.ok(fs.statSync(path.join(dir, 'planos.jpg')).size > 0);
+  assert.ok(fs.statSync(path.join(dir, 'capa.jpg')).size > 0);
+  assert.match(r.markdown, /Fala com tempos/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('levantamento: tema e classe numa chamada, tabela com link e classe', async () => {
+  const lista = [
+    { id: 'ig:1', canal: '@a', comentarios: 40000, outlier: 100, url: 'https://ig/1', descricao: 'Comment PROMPT', titulo: 'x' },
+    { id: 'ig:2', canal: '@b', comentarios: 12000, outlier: 30, url: 'https://ig/2', descricao: 'My new course', titulo: 'y' },
+  ];
+  const classes = await classificar({ nome: 'T', publico: 'p', objetivo: 'o' }, lista, { chamar: chamarSimulado });
+  assert.equal(classes.get('ig:1').classe, 'adaptavel');
+  assert.equal(classes.get('ig:2').classe, 'nao_serve');
+  const t = tabelaLevantamento(lista, classes, { titulo: 'Levantamento', linhaMetrica: '' });
+  assert.match(t, /\| 1 \| @a \| 40\.000 \| 100\.0× \| \[abrir\]\(https:\/\/ig\/1\)/);
+  assert.match(t, /✅ adaptável/);
+  assert.match(t, /❌ não serve/);
+  assert.match(t, /🔁/);
+});
+
+test('sites: material vira página com caixas, seções e campos; HTML escapado', () => {
+  const html = materialEmHtml('PASSO 1 — QUEM ENTRA\n\n  [ ] Cônjuge <b>\n➜ ANOTE: total _____\nRenda ....... R$ _____\n⚠️ Cuidado\ntexto normal');
+  assert.match(html, /<h2>PASSO 1 — QUEM ENTRA<\/h2>/);
+  assert.match(html, /type="checkbox"[^>]*><span>Cônjuge &lt;b&gt;<\/span>/);
+  assert.match(html, /class="anote"/);
+  assert.match(html, /class="campo"><span>Renda<\/span><span class="preencher">R\$<\/span>/);
+  assert.match(html, /class="alerta"/);
+  assert.doesNotMatch(html, /<b>/);
+  assert.equal(slug('Ação Já'), 'acao-ja');
+});
+
+test('sites: gera um site por pasta, com a página de cada material aprovado', () => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'sites-'));
+  fs.mkdirSync(path.join(raiz, 'conteudo', 'adv'), { recursive: true });
+  fs.writeFileSync(path.join(raiz, 'conteudo', 'adv', 'casa.json'), JSON.stringify({ palavra: 'CASA', nome: 'Teste <da> Casa', conteudo: '[ ] a', aprovadoEm: '2026-11-11' }));
+  const cfg = { sites: [{ id: 'adv', trilhas: [], titulo: 'T', descricao: 'D', assinatura: 'A', aviso: 'Aviso', cores: { fundo: '#fff', superficie: '#fff', texto: '#000', suave: '#555', linha: '#ddd', destaque: '#123', destaqueSuave: '#eee' }, webhookLead: 'https://hook' }] };
+  const gerados = gerarSites(raiz, cfg).map((f) => path.relative(raiz, f));
+  assert.deepEqual(gerados, ['sites/adv/index.html', 'sites/adv/casa/index.html']);
+  const pagina = fs.readFileSync(path.join(raiz, 'sites/adv/casa/index.html'), 'utf8');
+  assert.match(pagina, /Teste &lt;da&gt; Casa/);
+  assert.match(pagina, /id="form"/); // com webhook, o material abre depois do formulário
+  assert.match(pagina, /"https:\/\/hook"/);
+  fs.rmSync(raiz, { recursive: true, force: true });
 });
 
 test('extrairJson tolera cerca de código e texto em volta', () => {

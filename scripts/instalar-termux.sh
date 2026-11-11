@@ -41,8 +41,13 @@ mkdir -p logs data
 echo "▶ Agendamento diário (cron)"
 sv-enable crond 2>/dev/null || echo "  Feche e abra o Termux uma vez e rode de novo para ligar o crond."
 LINHA="17 6 * * * $PASTA/scripts/cron.sh"
-( crontab -l 2>/dev/null | grep -v 'fabrica-reels-juridico/scripts/cron.sh' ; echo "$LINHA" ) | crontab -
+( crontab -l 2>/dev/null | grep -v '/scripts/cron.sh' ; echo "$LINHA" ) | crontab -
 echo "  Agendado: todo dia às 06:17 (horário do celular)."
+
+if ! git config --global credential.helper >/dev/null; then
+  git config --global credential.helper store
+  echo "▶ O git vai guardar o token do GitHub no primeiro 'git push' (para publicar os sites)."
+fi
 
 cat <<'FIM'
 
@@ -52,4 +57,6 @@ Pronto. Falta só:
      (senão o Android mata o Termux de madrugada e o cron não roda)
   3. Teste sem gastar nada:            npm run simular
   4. Teste de verdade:                 npm run dia
+  5. Ver os roteiros do dia:           ls data/dias/$(date +%F)/
+  6. Aprovar e publicar um material:   node bin/aprovar.mjs PALAVRA --publicar
 FIM
