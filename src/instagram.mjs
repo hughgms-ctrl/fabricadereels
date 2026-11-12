@@ -136,6 +136,13 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
 
     const semente = (cfg.perfis || []).map(norm);
     for (const u of semente) memoria.perfis[u] ??= { origem: 'semente', descobertoEm: null, seguidores: null };
+    // Prioritários: da config (instagram.prioritarios) ou marcados pelo Telegram ("prioriza @x").
+    // São lidos todo dia, fora do rodízio e do limite de perfis por dia.
+    for (const u of (cfg.prioritarios || []).map(norm)) {
+      memoria.perfis[u] ??= { origem: 'prioritário', descobertoEm: null, seguidores: null };
+      if (memoria.perfis[u].prioritario !== false) memoria.perfis[u].prioritario = true;
+    }
+    const ehPrioritario = (u) => memoria.perfis[u]?.prioritario === true && !memoria.perfis[u]?.removido;
     const candidatos = [];
     const lidos = new Set();
     const vistos = new Set();
@@ -143,10 +150,11 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
     const descobertosHoje = [];
     // Perfis tirados pelo Telegram ("tira @x") ficam na memória com removido: true,
     // para não serem lidos nem voltarem quando forem citados de novo.
-    // Ordem: quem nunca foi lido primeiro, depois quem está há mais tempo sem leitura.
+    // Ordem: prioritários primeiro; depois quem nunca foi lido; depois quem está há mais tempo sem leitura.
     const ordemDeLeitura = (us) => us
       .filter((u) => !memoria.perfis[u]?.removido)
-      .sort((a, b) => String(memoria.perfis[a]?.lidoEm || '').localeCompare(String(memoria.perfis[b]?.lidoEm || '')));
+      .sort((a, b) => (ehPrioritario(b) - ehPrioritario(a))
+        || String(memoria.perfis[a]?.lidoEm || '').localeCompare(String(memoria.perfis[b]?.lidoEm || '')));
     let fila = ordemDeLeitura(Object.keys(memoria.perfis));
 
     for (let rodada = 0; rodada <= rodadas && fila.length; rodada++) {
@@ -155,7 +163,8 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
         if (vistos.has(username)) continue;
         vistos.add(username);
         let p = null;
-        if (lidos.size < maxLeituras && podeLer()) {
+        const vez = ehPrioritario(username) || [...lidos].filter((u) => !ehPrioritario(u)).length < maxLeituras;
+        if (vez && podeLer()) {
           try {
             const antes = usoMaximo;
             p = await perfil(username, { desdeMs });
@@ -185,6 +194,7 @@ export function criarInstagram({ igUserId, token, fetch: f = globalThis.fetch, p
           const outros = todos.filter((o) => o.id !== m.id).map((o) => o.comentarios);
           candidatos.push({
             ...m,
+            prioritario: ehPrioritario(username),
             metrica: m.comentarios,
             metricaNome: 'comentários',
             medianaCanal: mediana(outros),
@@ -271,14 +281,16 @@ export function arrobas(texto) {
  * Seleção do Instagram: COMENTÁRIOS primeiro. Corte absoluto, maior pro menor.
  * Empate: o de outlier maior (surpreendeu mais o próprio público).
  */
-export function selecionarPorComentarios(candidatos, { minimoComentarios = 10000, soVideo = false, jaUsados = new Set() } = {}) {
+export function selecionarPorComentarios(candidatos, { minimoComentarios = 10000, minimoPrioritarios = minimoComentarios, soVideo = false, jaUsados = new Set() } = {}) {
   const vistos = new Set();
   return candidatos
-    .filter((c) => c.comentarios >= minimoComentarios)
+    .filter((c) => c.comentarios >= (c.prioritario ? minimoPrioritarios : minimoComentarios))
     .filter((c) => !soVideo || c.ehVideo)
     .filter((c) => !jaUsados.has(c.id))
     .filter((c) => (vistos.has(c.id) ? false : vistos.add(c.id)))
-    .sort((a, b) => b.comentarios - a.comentarios || (b.outlier || 0) - (a.outlier || 0));
+    // Prioritários no topo (⭐); dentro de cada grupo, do maior número de comentários pro menor.
+    .sort((a, b) => (b.prioritario === true) - (a.prioritario === true)
+      || b.comentarios - a.comentarios || (b.outlier || 0) - (a.outlier || 0));
 }
 
 export function normalizarMidia(m, perfil) {

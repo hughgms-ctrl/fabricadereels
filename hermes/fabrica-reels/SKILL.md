@@ -51,6 +51,8 @@ Seu papel: cuidar da **lista de perfis** e responder dúvidas sobre o mapeamento
 | "tira @fulano" | `node bin/perfis.mjs tirar <trilha> @fulano` |
 | "adiciona @ciclano" | `node bin/perfis.mjs adicionar <trilha> @ciclano` |
 | "quais perfis?" | `node bin/perfis.mjs listar <trilha>` |
+| "prioriza @fulano" | `node bin/perfis.mjs priorizar <trilha> @fulano` (lido todo dia, corte menor, ⭐ no topo das Pautas) |
+| "tira prioridade @fulano" | `node bin/perfis.mjs despriorizar <trilha> @fulano` |
 | "roda o mapeamento agora" | `nohup node bin/rodar-dia.mjs --trilha <trilha> > logs/manual.log 2>&1 &` (avise: 20 a 40 min) |
 | "deu certo hoje?", "log" | `tail -n 40 logs/$(date +%F).log` |
 

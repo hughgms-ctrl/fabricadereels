@@ -186,3 +186,27 @@ test('roteiro: lê "4", "2,5,7" e "2, 5 e 7"', async () => {
   assert.deepEqual(lerNumeros('5 5'), [5]);
   assert.deepEqual(lerNumeros(''), []);
 });
+
+test('prioritários: lidos todo dia fora do rodízio, corte menor e ⭐ no topo das Pautas', async () => {
+  const { selecionarPorComentarios } = await import('../src/instagram.mjs');
+  const memoria = { perfis: {} };
+  const trilha = { instagram: { perfis: ['a', 'b', 'c'], prioritarios: ['vip'], maxPerfisPorDia: 1, rodadasDeAmpliacao: 0 } };
+  for (let dia = 0; dia < 2; dia++) {
+    const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
+    const r = await ig.minerar(trilha, { memoria, agoraData: new Date(Date.now() + dia * 3600000) });
+    assert.equal(r.perfisLidos, 2, `dia ${dia}: o prioritário + 1 do rodízio`);
+    assert.ok(r.candidatos.some((c) => c.canal === '@vip' && c.prioritario));
+  }
+  // corte menor para prioritário (12 mil passa no corte de 3 mil e não no de 20 mil) e topo da lista
+  const ig = criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() });
+  const r = await ig.minerar({ instagram: { perfis: ['a'], prioritarios: ['vip'], rodadasDeAmpliacao: 0 } }, { memoria: { perfis: {} } });
+  const lista = selecionarPorComentarios(r.candidatos, { minimoComentarios: 20000, minimoPrioritarios: 3000 });
+  assert.equal(lista[0].canal, '@vip');
+  assert.ok(lista.some((c) => c.canal === '@vip' && c.comentarios === 12000));
+  assert.ok(!lista.some((c) => c.canal === '@a' && c.comentarios === 12000));
+  // "tira prioridade" vence a config
+  const mem2 = { perfis: { vip: { prioritario: false } } };
+  const r2 = await criarInstagram({ igUserId: '1', token: 't', pausaMs: 0, fetch: criarFetchSimulado() })
+    .minerar({ instagram: { perfis: [], prioritarios: ['vip'], rodadasDeAmpliacao: 0 } }, { memoria: mem2 });
+  assert.ok(r2.candidatos.every((c) => !c.prioritario));
+});

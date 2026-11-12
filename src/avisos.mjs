@@ -72,7 +72,7 @@ export function msgPautas({ trilha, data, pautas, comRoteiroHoje = new Set() }) 
       ? `${fmt(c.comentarios)} comentários`
       : `${fmt(c.views)} views · ${c.outlier ? `${c.outlier.toFixed(0)}×` : ''}`;
     blocos.push([
-      `<b>${p.numero}.</b> ${comRoteiroHoje.has(c.id) ? '✍️ ' : ''}${esc(k.tema || c.titulo)}`,
+      `<b>${p.numero}.</b> ${c.prioritario ? '⭐ ' : ''}${comRoteiroHoje.has(c.id) ? '✍️ ' : ''}${esc(k.tema || c.titulo)}`,
       `${link(c.url, c.canal || 'abrir')} · ${numeros}${k.classe === 'direto' ? ' · ⚖️ direto' : ''}`,
       k.adaptacao ? `↳ <i>${esc(k.adaptacao)}</i>` : '',
     ].filter(Boolean).join('\n'));

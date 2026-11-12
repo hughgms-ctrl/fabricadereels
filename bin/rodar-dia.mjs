@@ -84,7 +84,10 @@ async function main() {
     if (ig && (trilha.instagram?.perfis?.length || Object.keys(memoria.perfis).length || trilha.instagram?.hashtags?.length)) {
       const r = await ig.minerar(trilha, { log, memoria }).catch((e) => (avisos.push(`Instagram: ${e.message}`), null));
       if (r) {
-        listaIG = selecionarPorComentarios(r.candidatos, { minimoComentarios: trilha.instagram.minimoComentarios ?? 10000 });
+        listaIG = selecionarPorComentarios(r.candidatos, {
+          minimoComentarios: trilha.instagram.minimoComentarios ?? 10000,
+          minimoPrioritarios: trilha.instagram.minimoComentariosPrioritarios ?? 3000,
+        });
         descobertos = r.descobertosHoje;
         chamadasIG = r.chamadas;
         perfisLidos = r.perfisLidos + r.perfisDoCache;
